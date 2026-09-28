@@ -1,0 +1,58 @@
+openapi: 3.0.3
+info:
+  title: Pay Attention API
+  version: 1.0.0
+  description: Financial tracking and budgeting API. Money uses integer minor units.
+servers:
+  - url: http://localhost:8000/api/v1
+security:
+  - tokenAuth: []
+paths:
+  /health/:
+    get:
+      security: []
+      responses:
+        '200': {description: API is healthy}
+  /auth/token/:
+    post:
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: {type: string}
+                password: {type: string, format: password}
+      responses:
+        '200': {description: Authentication token}
+        '400': {description: Invalid credentials}
+  /accounts/:
+    get: {responses: {'200': {description: User-owned accounts}}}
+    post: {responses: {'201': {description: Account created}}}
+  /categories/:
+    get: {responses: {'200': {description: User-owned categories}}}
+    post: {responses: {'201': {description: Category created}}}
+  /transactions/:
+    get: {responses: {'200': {description: User-owned transactions}}}
+    post: {responses: {'201': {description: Transaction created}}}
+  /budgets/:
+    get: {responses: {'200': {description: User-owned budgets}}}
+    post: {responses: {'201': {description: Budget created}}}
+  /summary/:
+    get:
+      parameters:
+        - {name: start, in: query, required: true, schema: {type: string, format: date}}
+        - {name: end, in: query, required: true, schema: {type: string, format: date}}
+      responses:
+        '200': {description: Expense totals by category}
+        '400': {description: Invalid date range}
+components:
+  securitySchemes:
+    tokenAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Token
+
