@@ -55,6 +55,7 @@ Before merging:
 - Check authorization and privacy implications.
 - Update the applicable role document, API documentation, glossary, or README.
 - Describe database migrations, compatibility concerns, and manual verification steps in the pull request.
+- Wait for user approval before pushing generated files to Github.
 
 ## Current repository guidance
 
