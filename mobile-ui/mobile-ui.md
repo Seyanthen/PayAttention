@@ -27,4 +27,3 @@ Build the React Native application in TypeScript: screens, navigation, forms, ch
 - Navigation guards protect authenticated routes and handle expired sessions.
 - Components have tests for important interactions and accessibility labels.
 - A short screen/API mapping is documented whenever a new feature is added.
-
