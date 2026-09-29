@@ -27,6 +27,16 @@ export default function AppTabs() {
           renderingMode="template"
         />
       </NativeTabs.Trigger>
+
+      {/* My Own Stuff */}
+      <NativeTabs.Trigger name="login">
+        <NativeTabs.Trigger.Label>Login</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="dashboard">
+        <NativeTabs.Trigger.Label>Dashboard</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+
     </NativeTabs>
   );
 }
