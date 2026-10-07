@@ -8,13 +8,13 @@ Joshua Adams, Luce Dewitt, Jack Edwards, Thu Dong, Lincoln Hanks
 A financial tracking app/website (tbd). It will help college students keep track of their finances (food, tuition, jobs). It will also allow the user to create budgets.
 
 ## Architecture
- Describe one or more architectures that you are considering for your team software.  Include languages, frameworks, data storage, and development tools in your descriptions.
+Code will be written primarily in VS code. Languages in this project include: TypeScript, React Native, Expo, Python, Django, PostgreSQL, GitHub Actions
 
 ## Software Features
 
-* [ ] First feature here
-* [ ] Second feature here
-* [ ] Keep going ....
+* [ ] Mobile Accessibility Apple and Android
+* [ ] Budget tracking
+* [ ] Budget Analysis
 
 ## Team Communication
  Microsoft Teams
