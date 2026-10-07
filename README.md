@@ -32,3 +32,10 @@ Code will be written primarily in VS code. Languages in this project include: Ty
 |Submit Team Assignments             |Luce Dewitt, Lincoln Hanks|
 
 ## Reflections
+
+## Luce Notes:
+## Setting up the software
+* [] Download expo
+* [] cd into folder
+* [] open on expo app'
+* [] npx expo start

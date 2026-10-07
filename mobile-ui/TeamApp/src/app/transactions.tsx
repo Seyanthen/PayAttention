@@ -178,3 +178,8 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
 });
+
+
+// view transactions
+// add transactions
+// transaction details
