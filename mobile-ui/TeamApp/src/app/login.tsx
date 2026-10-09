@@ -8,10 +8,10 @@ export default function LoginScreen() {
             <Text style={styles.title}>Login</Text>
             <Text>Welcome to our app!</Text>
 
-            <TextInput style={styles.input} placeholder="Email"></TextInput>
+            <TextInput style={styles.input} placeholder="Username"></TextInput>
             <TextInput style={styles.input} placeholder="Password" secureTextEntry></TextInput>
 
-            <Pressable style={styles.button} onPress={() => router.push("/dashboard")}>
+            <Pressable style={styles.button} onPress={() => router.replace("/")}>
                 <Text style={styles.buttonText}>Log In</Text>
             </Pressable>
         </View>
