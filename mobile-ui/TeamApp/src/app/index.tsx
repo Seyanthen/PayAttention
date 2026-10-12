@@ -29,44 +29,48 @@ function getDevMenuHint() {
   );
 }
 
-export default function HomeScreen() {
-  return (
-    // <Redirect href="/login"/>);
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            ₱ay Attention
-          </ThemedText>
-        </ThemedView>
-
-        {/* Log in Page Link? */}
-        <Pressable style={styles.button} onPress={() => router.push("/login")}>
-          <ThemedText style={styles.buttonText}>Log In Page</ThemedText>
-        </Pressable>
-
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
-  );
+export default function Index() {
+  return <Redirect href="/login" />;
 }
+
+// export default function HomeScreen() {
+//   return (
+//     // <Redirect href="/login"/>);
+//     <ThemedView style={styles.container}>
+//       <SafeAreaView style={styles.safeArea}>
+//         <ThemedView style={styles.heroSection}>
+//           <AnimatedIcon />
+//           <ThemedText type="title" style={styles.title}>
+//             ₱ay Attention
+//           </ThemedText>
+//         </ThemedView>
+
+//         {/* Log in Page Link? */}
+//         <Pressable style={styles.button} onPress={() => router.push("/login")}>
+//           <ThemedText style={styles.buttonText}>Log In Page</ThemedText>
+//         </Pressable>
+
+//         <ThemedText type="code" style={styles.code}>
+//           get started
+//         </ThemedText>
+
+//         <ThemedView type="backgroundElement" style={styles.stepContainer}>
+//           <HintRow
+//             title="Try editing"
+//             hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
+//           />
+//           <HintRow title="Dev tools" hint={getDevMenuHint()} />
+//           <HintRow
+//             title="Fresh start"
+//             hint={<ThemedText type="code">npm run reset-project</ThemedText>}
+//           />
+//         </ThemedView>
+
+//         {Platform.OS === 'web' && <WebBadge />}
+//       </SafeAreaView>
+//     </ThemedView>
+//   );
+// }
 
 const styles = StyleSheet.create({
   container: {
