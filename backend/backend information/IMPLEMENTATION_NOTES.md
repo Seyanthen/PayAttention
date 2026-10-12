@@ -93,8 +93,18 @@ python -m pip install -r requirements.txt
 copy .env.example .env
 python manage.py migrate
 python manage.py createsuperuser
+python manage.py seed_demo
 python manage.py runserver
 ```
+
+`seed_demo` creates repeatable local development data for `demo-user`, including
+accounts, categories, transactions, and an October 2026 grocery budget. It is
+safe to run more than once and should only be used with a development database.
+
+The seed command lives at `finance/management/commands/seed_demo.py`. Add or
+change sample records there when the mobile UI or QA needs a more realistic
+dataset. Do not put sample records in migration files or commit real financial
+data.
 
 The PostgreSQL database described in `.env` must exist before migrations run. Use a separate database and credentials for development, testing, and production.
 

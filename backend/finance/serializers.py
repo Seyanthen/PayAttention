@@ -6,11 +6,33 @@ from .models import Account, Budget, Category, Transaction
 User = get_user_model()
 
 
+def _request_user(serializer):
+    request = serializer.context.get("request")
+    return getattr(request, "user", None)
+
+
+def _validate_owned(value, user, field_name):
+    if value is not None and value.owner_id != getattr(user, "id", None):
+        raise serializers.ValidationError({field_name: "You can only use records that you own."})
+
+
 class AccountSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
         fields = ["id", "name", "account_type", "currency", "opening_balance_minor", "is_archived", "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Account name cannot be empty.")
+        return value
+
+    def validate_currency(self, value):
+        value = value.strip().upper()
+        if len(value) != 3 or not value.isalpha():
+            raise serializers.ValidationError("Currency must be a three-letter code, such as USD.")
+        return value
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -27,18 +49,33 @@ class TransactionSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def validate(self, attrs):
+        user = _request_user(self)
+        account = attrs.get("account", getattr(self.instance, "account", None))
         transaction_type = attrs.get("transaction_type", getattr(self.instance, "transaction_type", None))
         category = attrs.get("category", getattr(self.instance, "category", None))
         transfer_account = attrs.get("transfer_account", getattr(self.instance, "transfer_account", None))
+
+        _validate_owned(account, user, "account")
+        _validate_owned(category, user, "category")
+        _validate_owned(transfer_account, user, "transfer_account")
+
         if transaction_type == Transaction.TransactionType.TRANSFER and not transfer_account:
             raise serializers.ValidationError({"transfer_account": "Transfers require a destination account."})
         if transaction_type != Transaction.TransactionType.TRANSFER and transfer_account:
             raise serializers.ValidationError({"transfer_account": "Only transfers can specify a destination account."})
+        if transaction_type == Transaction.TransactionType.TRANSFER and account and account == transfer_account:
+            raise serializers.ValidationError({"transfer_account": "A transfer must use a different destination account."})
         if transaction_type == Transaction.TransactionType.INCOME and category and category.category_type != Category.CategoryType.INCOME:
             raise serializers.ValidationError({"category": "Income transactions require an income category."})
         if transaction_type == Transaction.TransactionType.EXPENSE and category and category.category_type != Category.CategoryType.EXPENSE:
             raise serializers.ValidationError({"category": "Expense transactions require an expense category."})
         return attrs
+
+    def validate_currency(self, value):
+        value = value.strip().upper()
+        if len(value) != 3 or not value.isalpha():
+            raise serializers.ValidationError("Currency must be a three-letter code, such as USD.")
+        return value
 
 
 class BudgetSerializer(serializers.ModelSerializer):

@@ -5,6 +5,7 @@ info:
   description: Financial tracking and budgeting API. Money uses integer minor units.
 servers:
   - url: http://localhost:8000/api/v1
+  - url: http://localhost:8000/api
 security:
   - tokenAuth: []
 paths:
@@ -30,14 +31,84 @@ paths:
         '200': {description: Authentication token}
         '400': {description: Invalid credentials}
   /accounts/:
-    get: {responses: {'200': {description: User-owned accounts}}}
-    post: {responses: {'201': {description: Account created}}}
+    get:
+      description: Returns only accounts owned by the authenticated user.
+      responses:
+        '200': {description: User-owned accounts}
+        '401': {description: Authentication required}
+    post:
+      description: Creates an account owned by the authenticated user.
+      responses:
+        '201': {description: Account created}
+        '400': {description: Invalid account data}
+        '401': {description: Authentication required}
+  /accounts/{id}/:
+    get:
+      description: Returns an account owned by the authenticated user.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer}}
+      responses:
+        '200': {description: Account details}
+        '401': {description: Authentication required}
+        '404': {description: Account not found}
+    put:
+      description: Replaces an account owned by the authenticated user.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer}}
+      responses:
+        '200': {description: Account updated}
+        '400': {description: Invalid account data}
+        '401': {description: Authentication required}
+        '404': {description: Account not found}
+    delete:
+      description: Deletes an account owned by the authenticated user.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer}}
+      responses:
+        '204': {description: Account deleted}
+        '401': {description: Authentication required}
+        '404': {description: Account not found}
   /categories/:
     get: {responses: {'200': {description: User-owned categories}}}
     post: {responses: {'201': {description: Category created}}}
   /transactions/:
-    get: {responses: {'200': {description: User-owned transactions}}}
-    post: {responses: {'201': {description: Transaction created}}}
+    get:
+      description: Returns only transactions owned by the authenticated user.
+      responses:
+        '200': {description: User-owned transactions}
+        '401': {description: Authentication required}
+    post:
+      description: Creates a transaction using only the authenticated user's related records.
+      responses:
+        '201': {description: Transaction created}
+        '400': {description: Invalid transaction data}
+        '401': {description: Authentication required}
+  /transactions/{id}/:
+    get:
+      description: Returns a transaction owned by the authenticated user.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer}}
+      responses:
+        '200': {description: Transaction details}
+        '401': {description: Authentication required}
+        '404': {description: Transaction not found}
+    put:
+      description: Replaces a transaction owned by the authenticated user.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer}}
+      responses:
+        '200': {description: Transaction updated}
+        '400': {description: Invalid transaction data}
+        '401': {description: Authentication required}
+        '404': {description: Transaction not found}
+    delete:
+      description: Deletes a transaction owned by the authenticated user.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer}}
+      responses:
+        '204': {description: Transaction deleted}
+        '401': {description: Authentication required}
+        '404': {description: Transaction not found}
   /budgets/:
     get: {responses: {'200': {description: User-owned budgets}}}
     post: {responses: {'201': {description: Budget created}}}
@@ -52,7 +123,8 @@ paths:
 components:
   securitySchemes:
     tokenAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: Token
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Use the format `Token <token>`.
 
