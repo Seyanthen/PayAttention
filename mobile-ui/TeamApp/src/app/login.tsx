@@ -11,7 +11,7 @@ export default function LoginScreen() {
             <TextInput style={styles.input} placeholder="Username"></TextInput>
             <TextInput style={styles.input} placeholder="Password" secureTextEntry></TextInput>
 
-            <Pressable style={styles.button} onPress={() => router.replace("/dashboard")}>
+            <Pressable style={styles.button} onPress={() => router.replace("/(app)/dashboard" as any)}>
                 <Text style={styles.buttonText}>Log In</Text>
             </Pressable>
         </View>
