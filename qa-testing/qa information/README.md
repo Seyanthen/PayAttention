@@ -14,3 +14,9 @@ This directory is the QA working area and follows the backend's documentation pa
 | `fixtures/README.md` | Safe fixture and seed-data conventions |
 
 Keep planned coverage labeled as planned until an automated or repeatable manual test exists. Link pull requests, CI runs, screenshots, logs, and API responses from the relevant case or defect.
+
+# Login Integration
+Frontend start command: npx expo start 
+    (Command Prompt terminal in the directory of ...mobile-ui\TeamApp)
+ Backend start command: python manage.py runserver 
+    (in powershell terminal in ...\backend)
