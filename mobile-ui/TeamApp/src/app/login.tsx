@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from "react-native";
 import { router } from "expo-router";
 
 import { login } from "@/services/api";
@@ -8,18 +8,28 @@ export default function LoginScreen() {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [message, setMessage] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
 
     async function handleLogin() {
+        if (isLoading) {
+            return;
+        }
+
         if (!username.trim() || !password) {
             setMessage("Enter a username and password.");
             return;
         }
+
+        setMessage("");
+        setIsLoading(true);
 
         try {
             await login(username.trim(), password);
             router.replace("/(app)/dashboard" as any);
         } catch (error) {
             setMessage(error instanceof Error ? error.message : "Login failed.");
+        } finally {
+            setIsLoading(false);
         }
     }
 
@@ -34,6 +44,7 @@ export default function LoginScreen() {
                 value={username}
                 onChangeText={setUsername}
                 autoCapitalize="none"
+                editable={!isLoading}
             />
             <TextInput
                 style={styles.input}
@@ -41,10 +52,21 @@ export default function LoginScreen() {
                 secureTextEntry
                 value={password}
                 onChangeText={setPassword}
+                editable={!isLoading}
             />
 
-            <Pressable style={styles.button} onPress={handleLogin}>
-                <Text style={styles.buttonText}>Log In</Text>
+            <Pressable
+                style={[styles.button, isLoading && styles.buttonDisabled]}
+                onPress={handleLogin}
+                disabled={isLoading}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: isLoading, busy: isLoading }}
+            >
+                {isLoading ? (
+                    <ActivityIndicator color="white" />
+                ) : (
+                    <Text style={styles.buttonText}>Log In</Text>
+                )}
             </Pressable>
 
             {message ? <Text style={styles.message}>{message}</Text> : null}
@@ -82,6 +104,10 @@ const styles = StyleSheet.create({
     buttonText: {
         color: "white",
         fontWeight: "bold",
+    },
+
+    buttonDisabled: {
+        opacity: 0.7,
     },
 
     message: {
