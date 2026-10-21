@@ -67,11 +67,20 @@ def user_total_balance_minor(user) -> int:
 
 
 def budget_spent_minor(budget: Budget) -> int:
+    return budget_spent_minor_for_period(budget, budget.period_start, budget.period_end)
+
+
+def budget_spent_minor_for_period(budget: Budget, period_start: date, period_end: date) -> int:
+    """Return expense totals for a budget during an inclusive reporting period."""
+    start = max(budget.period_start, period_start)
+    end = min(budget.period_end, period_end)
+    if end < start:
+        return 0
     return budget.category.transactions.filter(
         owner=budget.owner,
         transaction_type=Transaction.TransactionType.EXPENSE,
-        occurred_on__gte=budget.period_start,
-        occurred_on__lte=budget.period_end,
+        occurred_on__gte=start,
+        occurred_on__lte=end,
     ).aggregate(total=Sum("amount_minor"))["total"] or 0
 
 

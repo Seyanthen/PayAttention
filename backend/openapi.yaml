@@ -71,6 +71,10 @@ paths:
   /categories/:
     get: {responses: {'200': {description: User-owned categories}}}
     post: {responses: {'201': {description: Category created}}}
+  /categories/{id}/:
+    get: {responses: {'200': {description: Category details}, '404': {description: Category not found}}}
+    put: {responses: {'200': {description: Category updated}, '400': {description: Invalid category data}}}
+    delete: {responses: {'204': {description: Category deleted}, '404': {description: Category not found}}}
   /transactions/:
     get:
       description: Returns only transactions owned by the authenticated user.
@@ -112,6 +116,21 @@ paths:
   /budgets/:
     get: {responses: {'200': {description: User-owned budgets}}}
     post: {responses: {'201': {description: Budget created}}}
+  /budgets/current/:
+    get:
+      description: Returns budgets overlapping the current calendar month with spending totals.
+      responses:
+        '200': {description: Current-month budgets}
+        '401': {description: Authentication required}
+  /budgets/{month}/:
+    get:
+      description: Returns budgets overlapping a month in YYYY-MM format with spending totals.
+      parameters:
+        - {name: month, in: path, required: true, schema: {type: string, pattern: '^\\d{4}-\\d{2}$'}}
+      responses:
+        '200': {description: Monthly budgets}
+        '400': {description: Invalid month format}
+        '401': {description: Authentication required}
   /summary/:
     get:
       parameters:
@@ -120,6 +139,12 @@ paths:
       responses:
         '200': {description: Expense totals by category}
         '400': {description: Invalid date range}
+  /summary/current-month/:
+    get:
+      description: Returns expense totals grouped by category for the current calendar month.
+      responses:
+        '200': {description: Current-month expense summary}
+        '401': {description: Authentication required}
 components:
   securitySchemes:
     tokenAuth:
