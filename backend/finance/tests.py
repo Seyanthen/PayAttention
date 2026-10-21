@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
-from .models import Account, Category, Transaction
+from .models import Account, Budget, Category, Transaction
 from .services import account_balance_minor
 
 
@@ -143,4 +143,78 @@ class FinanceApiTests(APITestCase):
         )
         response = self.client.get(reverse("transaction-detail", args=[other_transaction.id]))
         self.assertEqual(response.status_code, 404)
+
+    def test_category_crud_and_owner_isolation(self):
+        response = self.client.post(reverse("category-list"), {
+            "name": "  Transport  ",
+            "category_type": "expense",
+        }, format="json")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["name"], "Transport")
+
+        Category.objects.create(owner=self.other_user, name="Private", category_type="expense")
+        response = self.client.get(reverse("category-list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual({row["name"] for row in response.data}, {"Food", "Transport"})
+
+    def test_budget_crud_and_current_month_report(self):
+        budget = Budget.objects.create(
+            owner=self.user,
+            category=self.expense_category,
+            name="January Food",
+            amount_minor=5000,
+            period_start=date(2026, 1, 1),
+            period_end=date(2026, 1, 31),
+        )
+        Transaction.objects.create(
+            owner=self.user,
+            account=self.account,
+            category=self.expense_category,
+            transaction_type="expense",
+            amount_minor=1250,
+            occurred_on=date(2026, 1, 15),
+        )
+        response = self.client.get(reverse("budget-detail", args=[budget.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["spent_minor"], 1250)
+        self.assertEqual(response.data["remaining_minor"], 3750)
+
+        response = self.client.get(reverse("budgets-for-month", args=["2026-01"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["period_start"], date(2026, 1, 1))
+        self.assertEqual(response.data["budgets"][0]["spent_minor"], 1250)
+
+    def test_budget_rejects_foreign_or_income_category(self):
+        foreign_category = Category.objects.create(owner=self.other_user, name="Other Food", category_type="expense")
+        response = self.client.post(reverse("budget-list"), {
+            "category": foreign_category.id,
+            "name": "Foreign Budget",
+            "amount_minor": 1000,
+            "period_start": "2026-01-01",
+            "period_end": "2026-01-31",
+            "currency": "USD",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("category", response.data)
+
+        income_category = Category.objects.create(owner=self.user, name="Salary", category_type="income")
+        response = self.client.post(reverse("budget-list"), {
+            "category": income_category.id,
+            "name": "Income Budget",
+            "amount_minor": 1000,
+            "period_start": "2026-01-01",
+            "period_end": "2026-01-31",
+            "currency": "USD",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("category", response.data)
+
+    def test_current_month_summary_and_invalid_budget_month(self):
+        response = self.client.get(reverse("current-month-summary"))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("period_start", response.data)
+        self.assertIn("period_end", response.data)
+
+        response = self.client.get(reverse("budgets-for-month", args=["not-a-month"]))
+        self.assertEqual(response.status_code, 400)
 

@@ -41,6 +41,12 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = ["id", "name", "category_type", "is_archived", "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at"]
 
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Category name cannot be empty.")
+        return value
+
 
 class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -85,12 +91,26 @@ class BudgetSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def validate(self, attrs):
+        user = _request_user(self)
         if attrs.get("period_end", getattr(self.instance, "period_end", None)) < attrs.get("period_start", getattr(self.instance, "period_start", None)):
             raise serializers.ValidationError({"period_end": "The budget period must end on or after it starts."})
         category = attrs.get("category", getattr(self.instance, "category", None))
+        _validate_owned(category, user, "category")
         if category and category.category_type != Category.CategoryType.EXPENSE:
             raise serializers.ValidationError({"category": "Budgets require an expense category."})
         return attrs
+
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Budget name cannot be empty.")
+        return value
+
+    def validate_currency(self, value):
+        value = value.strip().upper()
+        if len(value) != 3 or not value.isalpha():
+            raise serializers.ValidationError("Currency must be a three-letter code, such as USD.")
+        return value
 
 
 class UserSerializer(serializers.ModelSerializer):
