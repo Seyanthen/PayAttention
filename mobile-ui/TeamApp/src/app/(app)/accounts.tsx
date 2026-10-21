@@ -1,225 +1,307 @@
-import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
-import {  View, Text, Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useState } from 'react';
+import {
+  Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
-import { ExternalLink } from '@/components/external-link';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Collapsible } from '@/components/ui/collapsible';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+type Account = {
+  id: number;
+  name: string;
+  type: string;
+  balance: number;
+  last4: string;
+};
 
-// export default function TabTwoScreen() {
-//   const safeAreaInsets = useSafeAreaInsets();
-//   const insets = {
-//     ...safeAreaInsets,
-//     bottom: safeAreaInsets.bottom + BottomTabInset + Spacing.three,
-//   };
-//   const theme = useTheme();
+const initialAccounts: Account[] = [
+  { id: 1, name: 'Checking Account', type: 'Checking', balance: 4250.75, last4: '1842' },
+  { id: 2, name: 'Savings Account', type: 'Savings', balance: 6300, last4: '9077' },
+  { id: 3, name: 'Credit Card', type: 'Credit', balance: -248.2, last4: '3319' },
+];
 
-//   const contentPlatformStyle = Platform.select({
-//     android: {
-//       paddingTop: insets.top,
-//       paddingLeft: insets.left,
-//       paddingRight: insets.right,
-//       paddingBottom: insets.bottom,
-//     },
-//     web: {
-//       paddingTop: Spacing.six,
-//       paddingBottom: Spacing.four,
-//     },
-//   });
-
-//   return (
-//     <ScrollView
-//       style={[styles.scrollView, { backgroundColor: theme.background }]}
-//       contentInset={insets}
-//       contentContainerStyle={[styles.contentContainer, contentPlatformStyle]}>
-//       <ThemedView style={styles.container}>
-//         <ThemedView style={styles.titleContainer}>
-//           <ThemedText type="subtitle">Accounts</ThemedText>
-//           <ThemedText style={styles.centerText} themeColor="textSecondary">
-//             This starter app includes example{'\n'}code to help you get started.
-//           </ThemedText>
-
-//           <ExternalLink href="https://docs.expo.dev" asChild>
-//             <Pressable style={({ pressed }) => pressed && styles.pressed}>
-//               <ThemedView type="backgroundElement" style={styles.linkButton}>
-//                 <ThemedText type="link">Expo documentation</ThemedText>
-//                 <SymbolView
-//                   tintColor={theme.text}
-//                   name={{ ios: 'arrow.up.right.square', android: 'link', web: 'link' }}
-//                   size={12}
-//                 />
-//               </ThemedView>
-//             </Pressable>
-//           </ExternalLink>
-//         </ThemedView>
-
-//         <ThemedView style={styles.sectionsWrapper}>
-//           <Collapsible title="File-based routing">
-//             <ThemedText type="small">
-//               This app has two screens: <ThemedText type="code">src/app/index.tsx</ThemedText> and{' '}
-//               <ThemedText type="code">src/app/explore.tsx</ThemedText>
-//             </ThemedText>
-//             <ThemedText type="small">
-//               The layout file in <ThemedText type="code">src/app/_layout.tsx</ThemedText> sets up
-//               the tab navigator.
-//             </ThemedText>
-//             <ExternalLink href="https://docs.expo.dev/router/introduction">
-//               <ThemedText type="linkPrimary">Learn more</ThemedText>
-//             </ExternalLink>
-//           </Collapsible>
-
-//           <Collapsible title="Android, iOS, and web support">
-//             <ThemedView type="backgroundElement" style={styles.collapsibleContent}>
-//               <ThemedText type="small">
-//                 You can open this project on Android, iOS, and the web. To open the web version,
-//                 press <ThemedText type="smallBold">w</ThemedText> in the terminal running this
-//                 project.
-//               </ThemedText>
-//               <Image
-//                 source={require('@/assets/images/tutorial-web.png')}
-//                 style={styles.imageTutorial}
-//               />
-//             </ThemedView>
-//           </Collapsible>
-
-//           <Collapsible title="Images">
-//             <ThemedText type="small">
-//               For static images, you can use the <ThemedText type="code">@2x</ThemedText> and{' '}
-//               <ThemedText type="code">@3x</ThemedText> suffixes to provide files for different
-//               screen densities.
-//             </ThemedText>
-//             <Image source={require('@/assets/images/react-logo.png')} style={styles.imageReact} />
-//             <ExternalLink href="https://reactnative.dev/docs/images">
-//               <ThemedText type="linkPrimary">Learn more</ThemedText>
-//             </ExternalLink>
-//           </Collapsible>
-
-//           <Collapsible title="Light and dark mode components">
-//             <ThemedText type="small">
-//               This template has light and dark mode support. The{' '}
-//               <ThemedText type="code">useColorScheme()</ThemedText> hook lets you inspect what the
-//               user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-//             </ThemedText>
-//             <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-//               <ThemedText type="linkPrimary">Learn more</ThemedText>
-//             </ExternalLink>
-//           </Collapsible>
-
-//           <Collapsible title="Animations">
-//             <ThemedText type="small">
-//               This template includes an example of an animated component. The{' '}
-//               <ThemedText type="code">src/components/ui/collapsible.tsx</ThemedText> component uses
-//               the powerful <ThemedText type="code">react-native-reanimated</ThemedText> library to
-//               animate opening this hint.
-//             </ThemedText>
-//           </Collapsible>
-//         </ThemedView>
-//         {Platform.OS === 'web' && <WebBadge />}
-//       </ThemedView>
-//     </ScrollView>
+type ModalMode = 'details' | 'edit' | 'add';
 
 export default function AccountsScreen() {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Accounts</Text>
+  const [accounts, setAccounts] = useState(initialAccounts);
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+  const [modalMode, setModalMode] = useState<ModalMode>('details');
+  const [name, setName] = useState('');
+  const [type, setType] = useState('Checking');
+  const [balance, setBalance] = useState('');
+  const [balanceIsNegative, setBalanceIsNegative] = useState(false);
 
-      <Pressable style={styles.button} onPress={() => console.log("Add Account pressed")}>
-        <Text style={styles.buttonText}>Add Account</Text>
-      </Pressable>
-    </View>
+  const openDetails = (account: Account) => {
+    setSelectedAccount(account);
+    setModalMode('details');
+  };
+
+  const openEdit = (account: Account) => {
+    setSelectedAccount(account);
+    setName(account.name);
+    setType(account.type);
+    setBalance(Math.abs(account.balance).toFixed(2));
+    setBalanceIsNegative(account.balance < 0);
+    setModalMode('edit');
+  };
+
+  const openAdd = () => {
+    setSelectedAccount(null);
+    setName('');
+    setType('Checking');
+    setBalance('');
+    setBalanceIsNegative(false);
+    setModalMode('add');
+  };
+
+  const closeModal = () => {
+    Keyboard.dismiss();
+    setSelectedAccount(null);
+    setModalMode('details');
+  };
+
+  const dismissAmountKeyboard = () => {
+    Keyboard.dismiss();
+  };
+
+  const deleteAccount = () => {
+    if (!selectedAccount) return;
+
+    Alert.alert(
+      'Delete account?',
+      `This will remove ${selectedAccount.name} from your accounts.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setAccounts((currentAccounts) =>
+              currentAccounts.filter((account) => account.id !== selectedAccount.id),
+            );
+            closeModal();
+          },
+        },
+      ],
+    );
+  };
+
+  const saveAccount = () => {
+    const absoluteBalance = Math.abs(Number.parseFloat(balance) || 0);
+    const parsedBalance = balanceIsNegative ? -absoluteBalance : absoluteBalance;
+
+    if (modalMode === 'edit' && selectedAccount) {
+      setAccounts((currentAccounts) =>
+        currentAccounts.map((account) =>
+          account.id === selectedAccount.id
+            ? { ...account, name: name || account.name, type, balance: parsedBalance }
+            : account,
+        ),
+      );
+    } else {
+      setAccounts((currentAccounts) => [
+        ...currentAccounts,
+        { id: Date.now(), name: name || 'New Account', type, balance: parsedBalance, last4: '0000' },
+      ]);
+    }
+
+    closeModal();
+  };
+
+  const modalTitle = modalMode === 'add' ? 'Add Account' : modalMode === 'edit' ? 'Edit Account' : 'Account Details';
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.title}>Accounts</Text>
+            <Text style={styles.subtitle}>Manage your linked accounts</Text>
+          </View>
+          <Pressable style={styles.addButton} onPress={openAdd}>
+            <Text style={styles.addButtonText}>+ Add</Text>
+          </Pressable>
+        </View>
+
+        {accounts.map((account) => (
+          <Pressable
+            key={account.id}
+            style={({ pressed }) => [styles.accountCard, pressed && styles.pressed]}
+            onPress={() => openDetails(account)}>
+            <View style={styles.accountInfo}>
+              <Text style={styles.accountName}>{account.name}</Text>
+              <Text style={styles.accountMeta}>{account.type} •••• {account.last4}</Text>
+            </View>
+            <View style={styles.accountActions}>
+              <Text style={[styles.balance, account.balance < 0 && styles.negativeBalance]}>
+                {formatCurrency(account.balance)}
+              </Text>
+              <Pressable style={styles.editButton} onPress={() => openEdit(account)}>
+                <Text style={styles.editButtonText}>Edit</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        ))}
+
+        <Text style={styles.hint}>Tap an account to view its details.</Text>
+      </ScrollView>
+
+      <Modal
+        visible={selectedAccount !== null || modalMode === 'add'}
+        animationType="slide"
+        transparent
+        onRequestClose={closeModal}>
+        <View style={styles.modalBackdrop}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboardContainer}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{modalTitle}</Text>
+                <View style={styles.modalHeaderActions}>
+                  {/* The keyboard-aware modal moves the form up, so a header Done button is not needed. */}
+                  {/* <Pressable onPress={dismissAmountKeyboard}>
+                    <Text style={styles.doneText}>Done</Text>
+                  </Pressable> */}
+                  <Pressable onPress={closeModal}>
+                    <Text style={styles.closeText}>Close</Text>
+                  </Pressable>
+                </View>
+              </View>
+
+            {modalMode === 'details' && selectedAccount ? (
+              <View>
+                <Text style={styles.detailLabel}>Account name</Text>
+                <Text style={styles.detailValue}>{selectedAccount.name}</Text>
+                <Text style={styles.detailLabel}>Account type</Text>
+                <Text style={styles.detailValue}>{selectedAccount.type}</Text>
+                <Text style={styles.detailLabel}>Account number</Text>
+                <Text style={styles.detailValue}>•••• {selectedAccount.last4}</Text>
+                <Text style={styles.detailLabel}>Balance</Text>
+                <Text style={styles.detailBalance}>{formatCurrency(selectedAccount.balance)}</Text>
+
+                <Pressable style={styles.primaryButton} onPress={() => openEdit(selectedAccount)}>
+                  <Text style={styles.primaryButtonText}>Edit Account</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View>
+                <Text style={styles.inputLabel}>Account name</Text>
+                <TextInput
+                  style={styles.input}
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="e.g. Emergency Fund"
+                />
+
+                <Text style={styles.inputLabel}>Account type</Text>
+                <View style={styles.typeOptions}>
+                  {['Checking', 'Savings', 'Credit'].map((accountType) => (
+                    <Pressable
+                      key={accountType}
+                      style={[styles.typeButton, type === accountType && styles.selectedTypeButton]}
+                      onPress={() => setType(accountType)}>
+                      <Text style={[styles.typeButtonText, type === accountType && styles.selectedTypeButtonText]}>
+                        {accountType}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                <Text style={styles.inputLabel}>Current balance</Text>
+                <TextInput
+                  style={styles.input}
+                  value={balance}
+                  onChangeText={setBalance}
+                  placeholder="0.00"
+                  keyboardType="decimal-pad"
+                  blurOnSubmit
+                />
+
+                <Pressable
+                  style={[styles.signButton, balanceIsNegative && styles.negativeSignButton]}
+                  onPress={() => setBalanceIsNegative((isNegative) => !isNegative)}>
+                  <Text style={[styles.signButtonText, balanceIsNegative && styles.negativeSignButtonText]}>
+                    {balanceIsNegative ? 'Negative balance' : 'Positive balance'}
+                  </Text>
+                </Pressable>
+
+                <Pressable style={styles.primaryButton} onPress={saveAccount}>
+                  <Text style={styles.primaryButtonText}>
+                    {modalMode === 'add' ? 'Add Account' : 'Save Changes'}
+                  </Text>
+                </Pressable>
+
+                {modalMode === 'edit' && (
+                  <Pressable style={styles.deleteButton} onPress={deleteAccount}>
+                    <Text style={styles.deleteButtonText}>Delete Account</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
-//   );
-// }
-
-// const styles = StyleSheet.create({
-//   scrollView: {
-//     flex: 1,
-//   },
-//   contentContainer: {
-//     flexDirection: 'row',
-//     justifyContent: 'center',
-//   },
-//   container: {
-//     maxWidth: MaxContentWidth,
-//     flexGrow: 1,
-//   },
-//   titleContainer: {
-//     gap: Spacing.three,
-//     alignItems: 'center',
-//     paddingHorizontal: Spacing.four,
-//     paddingVertical: Spacing.six,
-//   },
-//   centerText: {
-//     textAlign: 'center',
-//   },
-//   pressed: {
-//     opacity: 0.7,
-//   },
-//   linkButton: {
-//     flexDirection: 'row',
-//     paddingHorizontal: Spacing.four,
-//     paddingVertical: Spacing.two,
-//     borderRadius: Spacing.five,
-//     justifyContent: 'center',
-//     gap: Spacing.one,
-//     alignItems: 'center',
-//   },
-//   sectionsWrapper: {
-//     gap: Spacing.five,
-//     paddingHorizontal: Spacing.four,
-//     paddingTop: Spacing.three,
-//   },
-//   collapsibleContent: {
-//     alignItems: 'center',
-//   },
-//   imageTutorial: {
-//     width: '100%',
-//     aspectRatio: 296 / 171,
-//     borderRadius: Spacing.three,
-//     marginTop: Spacing.two,
-//   },
-//   imageReact: {
-//     width: 100,
-//     height: 100,
-//     alignSelf: 'center',
-//   },
-// });
-
+function formatCurrency(value: number) {
+  return `${value < 0 ? '-' : ''}$${Math.abs(value).toFixed(2)}`;
+}
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
-  },
-
-  title: {
-    fontSize: 32,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-
-  button: {
-    backgroundColor: "#2563eb",
-    padding: 14,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-
-  buttonText: {
-    color: "white",
-    fontWeight: "bold",
-  },
-})
-
-
-// view accounts
-// add account
-// edit account
-// account details?+
+  safeArea: { flex: 1, backgroundColor: '#f8fafc' },
+  container: { padding: 24, paddingBottom: 48 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
+  title: { fontSize: 32, fontWeight: 'bold', color: '#0f172a' },
+  subtitle: { marginTop: 4, color: '#64748b' },
+  addButton: { backgroundColor: '#2563eb', paddingHorizontal: 16, paddingVertical: 11, borderRadius: 8 },
+  addButtonText: { color: '#fff', fontWeight: 'bold' },
+  accountCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#e2e8f0' },
+  pressed: { opacity: 0.7 },
+  accountInfo: { flex: 1 },
+  accountName: { color: '#0f172a', fontSize: 17, fontWeight: '600' },
+  accountMeta: { color: '#64748b', marginTop: 6 },
+  accountActions: { alignItems: 'flex-end', gap: 8 },
+  balance: { color: '#15803d', fontSize: 16, fontWeight: 'bold' },
+  negativeBalance: { color: '#dc2626' },
+  editButton: { paddingHorizontal: 10, paddingVertical: 5 },
+  editButtonText: { color: '#2563eb', fontWeight: '600' },
+  hint: { textAlign: 'center', color: '#64748b', marginTop: 16 },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(15, 23, 42, 0.45)' },
+  keyboardContainer: { width: '100%' },
+  modalCard: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, minHeight: 360 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+  modalHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  modalTitle: { fontSize: 24, fontWeight: 'bold', color: '#0f172a' },
+  doneText: { color: '#15803d', fontWeight: '700' },
+  closeText: { color: '#2563eb', fontWeight: '600' },
+  detailLabel: { color: '#64748b', marginTop: 12, marginBottom: 4 },
+  detailValue: { color: '#0f172a', fontSize: 17 },
+  detailBalance: { color: '#15803d', fontSize: 28, fontWeight: 'bold', marginBottom: 24 },
+  inputLabel: { color: '#334155', fontWeight: '600', marginBottom: 6, marginTop: 12 },
+  input: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, padding: 12, color: '#0f172a' },
+  signButton: { alignSelf: 'flex-start', borderWidth: 1, borderColor: '#94a3b8', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, marginTop: 10 },
+  negativeSignButton: { backgroundColor: '#fee2e2', borderColor: '#dc2626' },
+  signButtonText: { color: '#475569', fontWeight: '600' },
+  negativeSignButtonText: { color: '#b91c1c' },
+  typeOptions: { flexDirection: 'row', gap: 8 },
+  typeButton: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingVertical: 9, paddingHorizontal: 12 },
+  selectedTypeButton: { backgroundColor: '#dbeafe', borderColor: '#2563eb' },
+  typeButtonText: { color: '#475569' },
+  selectedTypeButtonText: { color: '#1d4ed8', fontWeight: '600' },
+  primaryButton: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 24 },
+  primaryButtonText: { color: '#fff', fontWeight: 'bold' },
+  deleteButton: { borderWidth: 1, borderColor: '#dc2626', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 12 },
+  deleteButtonText: { color: '#dc2626', fontWeight: 'bold' },
+});
