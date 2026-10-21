@@ -14,6 +14,12 @@ export default function LoginScreen() {
             <Pressable style={styles.button} onPress={() => router.replace("/(app)/dashboard" as any)}>
                 <Text style={styles.buttonText}>Log In</Text>
             </Pressable>
+
+            {/* temporary */}
+            <Pressable style={styles.button} onPress={() => router.replace("/(app)/dashboard" as any)}>
+                <Text style={styles.buttonText}>temporary</Text>
+            </Pressable>
+
         </View>
     );
 }
