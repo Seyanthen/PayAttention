@@ -1,0 +1,7 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}\\backend\\.venv\\Scripts\\python.exe",
+  "python.terminal.activateEnvironment": true,
+  "terminal.integrated.cwd": "${workspaceFolder}\\backend",
+  "workbench.browser.openLocalhostLinks": false,
+  "simpleBrowser.useIntegratedBrowser": false
+}
