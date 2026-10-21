@@ -37,5 +37,7 @@ QA owns the test inventory, execution evidence, regression plan, and defect repo
 # Login Integration
 Frontend start command: npx expo start 
     (Command Prompt terminal in the directory of ...mobile-ui\TeamApp)
+      cd D:\CSE310\PayAttention\mobile-ui\TeamApp
  Backend start command: python manage.py runserver 
+      .\.venv\Scripts\python.exe manage.py runserver
     (in powershell terminal in ...\backend)
