@@ -67,20 +67,11 @@ def user_total_balance_minor(user) -> int:
 
 
 def budget_spent_minor(budget: Budget) -> int:
-    return budget_spent_minor_for_period(budget, budget.period_start, budget.period_end)
-
-
-def budget_spent_minor_for_period(budget: Budget, period_start: date, period_end: date) -> int:
-    """Return expense totals for a budget during an inclusive reporting period."""
-    start = max(budget.period_start, period_start)
-    end = min(budget.period_end, period_end)
-    if end < start:
-        return 0
     return budget.category.transactions.filter(
         owner=budget.owner,
         transaction_type=Transaction.TransactionType.EXPENSE,
-        occurred_on__gte=start,
-        occurred_on__lte=end,
+        occurred_on__gte=budget.period_start,
+        occurred_on__lte=budget.period_end,
     ).aggregate(total=Sum("amount_minor"))["total"] or 0
 
 
@@ -94,4 +85,53 @@ def spending_summary(user, period_start: date, period_end: date) -> dict:
     by_category = [{"category_id": row["category_id"], "category_name": row["category__name"], "total_minor": row["total_minor"]} for row in rows]
     return {"period_start": period_start, "period_end": period_end, "total_expenses_minor": sum(row["total_minor"] for row in by_category), "by_category": by_category}
 
+
+# transactions for budget table 
+
+def budget_transactions(budget: Budget):
+    """Return expense transactions counted toward a budget."""
+    return Transaction.objects.filter(
+        owner=budget.owner,
+        category=budget.category,
+        transaction_type=Transaction.TransactionType.EXPENSE,
+        occurred_on__gte=budget.period_start,
+        occurred_on__lte=budget.period_end,
+    ).order_by("occurred_on", "created_at")
+
+def budget_performance(budget: Budget) -> dict:
+    """Return spending performance information for one budget."""
+    spent = budget_spent_minor(budget)
+    limit = budget.amount_minor
+    remaining = limit - spent
+
+    return {
+        "budget_id": budget.id,
+        "category": budget.category.name,
+        "limit_minor": limit,
+        "spent_minor": spent,
+        "remaining_minor": remaining,
+        "percentage_used": round((spent / limit) * 100, 2),
+        "over_budget": spent > limit,
+    }
+    
+    
+def over_budget_categories(user):
+    """Return the user's budgets where spending exceeded the limit."""
+    results = []
+
+    budgets = Budget.objects.filter(owner=user)
+
+    for budget in budgets:
+        spent = budget_spent_minor(budget)
+
+        if spent > budget.amount_minor:
+            results.append({
+                "budget_id": budget.id,
+                "category": budget.category.name,
+                "limit_minor": budget.amount_minor,
+                "spent_minor": spent,
+                "over_by_minor": spent - budget.amount_minor,
+            })
+
+    return results
 
