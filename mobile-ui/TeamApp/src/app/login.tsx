@@ -3,12 +3,19 @@ import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 
 import { router } from "expo-router";
 
 import { getApiErrorMessage, login } from "@/services/api";
+import { enableMockAuthentication } from "@/services/auth";
 
 export default function LoginScreen() {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [message, setMessage] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+
+    function handleTestingBypass() {
+        if (enableMockAuthentication()) {
+            router.replace("/(app)/dashboard" as any);
+        }
+    }
 
     async function handleLogin() {
         if (isLoading) {
@@ -71,10 +78,12 @@ export default function LoginScreen() {
             </Pressable>
 
             {message ? <Text style={styles.message}>{message}</Text> : null}
-            {/* temporary */}
-            <Pressable style={styles.button} onPress={() => router.replace("/(app)/dashboard" as any)}>
-                <Text style={styles.buttonText}>temporary</Text>
-            </Pressable>
+
+            {__DEV__ ? (
+                <Pressable style={styles.button} onPress={handleTestingBypass}>
+                    <Text style={styles.buttonText}>Testing Bypass</Text>
+                </Pressable>
+            ) : null}
 
         </View>
     );

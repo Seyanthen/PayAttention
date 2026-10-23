@@ -35,13 +35,16 @@ The backend tests currently cover integer-unit balance calculation, authenticate
 QA owns the test inventory, execution evidence, regression plan, and defect reports. Backend, database, mobile, and finance leads own the behavior and contracts that QA verifies. Changes to financial rules must update the finance documentation and the corresponding QA cases together.
 
 # Login Integration
-Frontend start command: npx expo start 
+Frontend start command:
+    npx expo start 
+
     (Command Prompt terminal in the directory of ...mobile-ui\TeamApp)
       cd D:\CSE310\PayAttention\mobile-ui\TeamApp
- Backend start command: python manage.py runserver 
+
+Backend start command:
       python manage.py check
       python manage.py runserver
-
-
+      
+To start in the Vitrual Environment (in powershell terminal in ...\backend)
       .\.venv\Scripts\python.exe manage.py runserver
-    (in powershell terminal in ...\backend)
+    

@@ -1,4 +1,11 @@
-import { clearAuthToken, getAuthToken, setAuthToken } from '@/services/auth';
+import {
+  clearAuthToken,
+  clearPersistedAuthToken,
+  getAuthToken,
+  isMockAuthenticated,
+  persistAuthToken,
+  setAuthToken,
+} from '@/services/auth';
 
 const API_BASE_URL = 'http://127.0.0.1:8000/api/v1';
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -124,6 +131,12 @@ export async function login(username: string, password: string): Promise<LoginRe
 
     const result = (await response.json()) as LoginResponse;
     setAuthToken(result.token);
+    try {
+      await persistAuthToken(result.token);
+    } catch {
+      clearAuthToken();
+      throw new Error('Unable to save your login securely. Please try again.');
+    }
     return result;
   } catch (error) {
     if (error instanceof ApiError && error.status === 400) {
@@ -137,6 +150,10 @@ export async function authenticatedFetch(
   path: string,
   options: RequestInit = {},
 ): Promise<Response> {
+  if (isMockAuthenticated()) {
+    throw new Error('API requests are unavailable while using the testing bypass.');
+  }
+
   const token = getAuthToken();
 
   if (!token) {
@@ -154,6 +171,7 @@ export async function authenticatedFetch(
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
       clearAuthToken();
+      await clearPersistedAuthToken();
     }
     throw error;
   }
