@@ -2,7 +2,7 @@ import { useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from "react-native";
 import { router } from "expo-router";
 
-import { login } from "@/services/api";
+import { getApiErrorMessage, login } from "@/services/api";
 
 export default function LoginScreen() {
     const [username, setUsername] = useState("");
@@ -27,7 +27,7 @@ export default function LoginScreen() {
             await login(username.trim(), password);
             router.replace("/(app)/dashboard" as any);
         } catch (error) {
-            setMessage(error instanceof Error ? error.message : "Login failed.");
+            setMessage(getApiErrorMessage(error, "Login failed. Please try again."));
         } finally {
             setIsLoading(false);
         }
