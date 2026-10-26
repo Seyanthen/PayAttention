@@ -27,6 +27,18 @@ export default function AppTabs() {
           <TabTrigger name="accounts" href={"/(app)/accounts" as any} asChild>
             <TabButton>Accounts</TabButton>
           </TabTrigger>
+          <TabTrigger name="budget" href={"/(app)/budget" as any} asChild>
+            <TabButton>Budget</TabButton>
+          </TabTrigger>
+          <TabTrigger name="goals" href={"/(app)/goals" as any} asChild>
+            <TabButton>Goals</TabButton>
+          </TabTrigger>
+          <TabTrigger name="transactions" href={"/(app)/transactions" as any} asChild>
+            <TabButton>Transactions</TabButton>
+          </TabTrigger>
+          <TabTrigger name="settings" href={"/(app)/settings" as any} asChild>
+            <TabButton>Settings</TabButton>
+          </TabTrigger>
         </CustomTabList>
       </TabList>
     </Tabs>
