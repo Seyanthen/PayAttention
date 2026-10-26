@@ -3,6 +3,7 @@ export type ValidationErrors = Record<string, string | undefined>;
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const CURRENCY_PATTERN = /^[A-Za-z]{3}$/;
 const POSITIVE_MINOR_UNIT_PATTERN = /^[1-9]\d*$/;
+const NON_NEGATIVE_MINOR_UNIT_PATTERN = /^\d+$/;
 
 export function required(value: string, label: string): string | undefined {
   return value.trim() ? undefined : `${label} is required.`;
@@ -26,6 +27,39 @@ export function validatePositiveMinorUnits(value: string, label = "Amount"): str
   return parsePositiveMinorUnits(value) === undefined
     ? `${label} must be a positive whole number of minor units.`
     : undefined;
+}
+
+export function validateTransactionFilters(input: {
+  startDate: string;
+  endDate: string;
+  minAmountMinor: string;
+  maxAmountMinor: string;
+  transactionType: string;
+}): ValidationErrors {
+  const errors: ValidationErrors = {};
+  const startDateError = input.startDate.trim() ? validateIsoDate(input.startDate, "Start date") : undefined;
+  const endDateError = input.endDate.trim() ? validateIsoDate(input.endDate, "End date") : undefined;
+  if (startDateError) errors.startDate = startDateError;
+  if (endDateError) errors.endDate = endDateError;
+  if (!startDateError && !endDateError && input.startDate && input.endDate && input.endDate < input.startDate) {
+    errors.endDate = "End date must be on or after start date.";
+  }
+
+  for (const [key, value, label] of [
+    ["minAmountMinor", input.minAmountMinor, "Minimum amount"],
+    ["maxAmountMinor", input.maxAmountMinor, "Maximum amount"],
+  ] as const) {
+    if (value.trim() && !NON_NEGATIVE_MINOR_UNIT_PATTERN.test(value.trim())) {
+      errors[key] = `${label} must be a non-negative whole number of minor units.`;
+    }
+  }
+  if (!errors.minAmountMinor && !errors.maxAmountMinor && input.minAmountMinor && input.maxAmountMinor && Number(input.minAmountMinor) > Number(input.maxAmountMinor)) {
+    errors.maxAmountMinor = "Maximum amount must be greater than or equal to minimum amount.";
+  }
+  if (input.transactionType && !["expense", "income", "transfer"].includes(input.transactionType)) {
+    errors.transactionType = "Select a valid transaction type.";
+  }
+  return errors;
 }
 
 export function validateIsoDate(value: string, label = "Date"): string | undefined {
