@@ -5,7 +5,7 @@ from django.urls import reverse
 from rest_framework.test import APITestCase
 
 from .models import Account, Budget, Category, Transaction
-from .services import account_balance_minor, expenses_minor, income_minor, monthly_expenses_minor, monthly_income_minor, monthly_net_cash_flow_minor, user_total_balance_minor
+from .services import account_balance_minor, expenses_minor, financial_summary, income_minor, monthly_expenses_minor, monthly_income_minor, monthly_net_cash_flow_minor, user_total_assets_minor, user_total_balance_minor
 
 
 class FinanceApiTests(APITestCase):
@@ -37,6 +37,24 @@ class FinanceApiTests(APITestCase):
         self.assertEqual(monthly_income_minor(self.user, 2026, 1), 200000)
         self.assertEqual(monthly_expenses_minor(self.user, 2026, 1), 32700)
         self.assertEqual(monthly_net_cash_flow_minor(self.user, 2026, 1), 167300)
+
+    def test_sprint_two_financial_summary_returns_database_metrics(self):
+        credit = Account.objects.create(owner=self.user, name="Credit Card", account_type=Account.AccountType.CREDIT)
+        Transaction.objects.create(owner=self.user, account=self.account, category=self.income_category, transaction_type="income", amount_minor=200000, occurred_on=date(2026, 1, 1))
+        Transaction.objects.create(owner=self.user, account=self.account, category=self.expense_category, transaction_type="expense", amount_minor=32700, occurred_on=date(2026, 1, 31))
+        Transaction.objects.create(owner=self.user, account=credit, category=self.expense_category, transaction_type="expense", amount_minor=10000, occurred_on=date(2026, 1, 31))
+        summary = financial_summary(self.user, date(2026, 1, 1), date(2026, 1, 31))
+        self.assertEqual(summary["total_income_minor"], 200000)
+        self.assertEqual(summary["total_expenses_minor"], 42700)
+        self.assertEqual(summary["monthly_cash_flow_minor"], 157300)
+        self.assertEqual(summary["total_assets_minor"], 177300)
+        self.assertEqual({row["account_name"] for row in summary["account_balances"]}, {"Checking", "Credit Card"})
+
+    def test_summary_endpoint_returns_sprint_two_metrics(self):
+        response = self.client.get(reverse("summary"), {"start": "2026-01-01", "end": "2026-01-31"})
+        self.assertEqual(response.status_code, 200)
+        for field in ("account_balances", "total_assets_minor", "total_expenses_minor", "total_income_minor", "monthly_cash_flow_minor"):
+            self.assertIn(field, response.data)
 
     def test_accounts_are_scoped_to_authenticated_owner(self):
         Account.objects.create(owner=self.other_user, name="Private")

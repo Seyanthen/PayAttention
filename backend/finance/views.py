@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from .models import Account, Budget, Category, Transaction
 from .permissions import IsOwner
 from .serializers import AccountSerializer, BudgetSerializer, CategorySerializer, TransactionSerializer, UserSerializer
-from .services import account_balance_minor, budget_spent_minor, budget_spent_minor_for_period, spending_summary
+from .services import account_balance_minor, budget_spent_minor, budget_spent_minor_for_period, financial_summary
 
 
 class OwnedModelViewSet(viewsets.ModelViewSet):
@@ -142,11 +142,11 @@ def summary(request):
         return Response({"detail": "start and end must be ISO-8601 dates (YYYY-MM-DD)."}, status=status.HTTP_400_BAD_REQUEST)
     if period_end < period_start:
         return Response({"detail": "end must be on or after start."}, status=status.HTTP_400_BAD_REQUEST)
-    return Response(spending_summary(request.user, period_start, period_end))
+    return Response(financial_summary(request.user, period_start, period_end))
 
 
 @api_view(["GET"])
 def current_month_summary(request):
     period_start, period_end = _month_bounds(timezone.localdate())
-    return Response(spending_summary(request.user, period_start, period_end))
+    return Response(financial_summary(request.user, period_start, period_end))
 
