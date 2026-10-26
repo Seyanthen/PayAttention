@@ -1,3 +1,4 @@
+from calendar import monthrange
 from datetime import date
 
 from django.db.models import Q, Sum
@@ -64,6 +65,43 @@ def user_total_balance_minor(user) -> int:
     included because archiving hides an account but does not erase its money.
     """
     return sum(account_balance_minor(account) for account in Account.objects.filter(owner=user))
+
+
+def _user_transaction_total_minor(user, transaction_type: str, period_start: date | None = None, period_end: date | None = None) -> int:
+    transactions = Transaction.objects.filter(owner=user, transaction_type=transaction_type)
+    if period_start is not None:
+        transactions = transactions.filter(occurred_on__gte=period_start)
+    if period_end is not None:
+        transactions = transactions.filter(occurred_on__lte=period_end)
+    return transactions.aggregate(total=Sum("amount_minor"))["total"] or 0
+
+
+def income_minor(user, period_start: date | None = None, period_end: date | None = None) -> int:
+    """Return a user's income in an optional inclusive date range."""
+
+    return _user_transaction_total_minor(user, Transaction.TransactionType.INCOME, period_start, period_end)
+
+
+def expenses_minor(user, period_start: date | None = None, period_end: date | None = None) -> int:
+    """Return a user's expenses in an optional inclusive date range."""
+
+    return _user_transaction_total_minor(user, Transaction.TransactionType.EXPENSE, period_start, period_end)
+
+
+def monthly_income_minor(user, year: int, month: int) -> int:
+    start = date(year, month, 1)
+    end = date(year, month, monthrange(year, month)[1])
+    return income_minor(user, start, end)
+
+
+def monthly_expenses_minor(user, year: int, month: int) -> int:
+    start = date(year, month, 1)
+    end = date(year, month, monthrange(year, month)[1])
+    return expenses_minor(user, start, end)
+
+
+def monthly_net_cash_flow_minor(user, year: int, month: int) -> int:
+    return monthly_income_minor(user, year, month) - monthly_expenses_minor(user, year, month)
 
 
 def budget_spent_minor(budget: Budget) -> int:

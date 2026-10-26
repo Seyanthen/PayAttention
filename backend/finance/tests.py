@@ -5,7 +5,7 @@ from django.urls import reverse
 from rest_framework.test import APITestCase
 
 from .models import Account, Budget, Category, Transaction
-from .services import account_balance_minor
+from .services import account_balance_minor, expenses_minor, income_minor, monthly_expenses_minor, monthly_income_minor, monthly_net_cash_flow_minor, user_total_balance_minor
 
 
 class FinanceApiTests(APITestCase):
@@ -16,10 +16,27 @@ class FinanceApiTests(APITestCase):
         self.account = Account.objects.create(owner=self.user, name="Checking", opening_balance_minor=10000)
         self.other_account = Account.objects.create(owner=self.other_user, name="Other Checking")
         self.expense_category = Category.objects.create(owner=self.user, name="Food", category_type=Category.CategoryType.EXPENSE)
+        self.income_category = Category.objects.create(owner=self.user, name="Paycheck", category_type=Category.CategoryType.INCOME)
 
     def test_account_balance_uses_integer_minor_units(self):
         Transaction.objects.create(owner=self.user, account=self.account, category=self.expense_category, transaction_type="expense", amount_minor=1250, occurred_on=date(2026, 1, 1))
         self.assertEqual(account_balance_minor(self.account), 8750)
+
+    def test_sprint_one_income_expenses_and_total_balance(self):
+        Transaction.objects.create(owner=self.user, account=self.account, category=self.income_category, transaction_type="income", amount_minor=200000, occurred_on=date(2026, 1, 1))
+        Transaction.objects.create(owner=self.user, account=self.account, category=self.expense_category, transaction_type="expense", amount_minor=32700, occurred_on=date(2026, 1, 10))
+        self.assertEqual(income_minor(self.user), 200000)
+        self.assertEqual(expenses_minor(self.user), 32700)
+        self.assertEqual(account_balance_minor(self.account), 177300)
+        self.assertEqual(user_total_balance_minor(self.user), 177300)
+
+    def test_sprint_one_monthly_cash_flow_uses_inclusive_calendar_month(self):
+        Transaction.objects.create(owner=self.user, account=self.account, category=self.income_category, transaction_type="income", amount_minor=200000, occurred_on=date(2026, 1, 1))
+        Transaction.objects.create(owner=self.user, account=self.account, category=self.expense_category, transaction_type="expense", amount_minor=32700, occurred_on=date(2026, 1, 31))
+        Transaction.objects.create(owner=self.user, account=self.account, category=self.income_category, transaction_type="income", amount_minor=50000, occurred_on=date(2026, 2, 1))
+        self.assertEqual(monthly_income_minor(self.user, 2026, 1), 200000)
+        self.assertEqual(monthly_expenses_minor(self.user, 2026, 1), 32700)
+        self.assertEqual(monthly_net_cash_flow_minor(self.user, 2026, 1), 167300)
 
     def test_accounts_are_scoped_to_authenticated_owner(self):
         Account.objects.create(owner=self.other_user, name="Private")
@@ -155,7 +172,7 @@ class FinanceApiTests(APITestCase):
         Category.objects.create(owner=self.other_user, name="Private", category_type="expense")
         response = self.client.get(reverse("category-list"))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual({row["name"] for row in response.data}, {"Food", "Transport"})
+        self.assertEqual({row["name"] for row in response.data}, {"Food", "Paycheck", "Transport"})
 
     def test_budget_crud_and_current_month_report(self):
         budget = Budget.objects.create(
