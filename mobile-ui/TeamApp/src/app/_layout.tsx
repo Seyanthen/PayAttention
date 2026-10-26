@@ -13,7 +13,16 @@ export default function RootLayout() {
   const [isAuthReady, setIsAuthReady] = useState(false);
 
   useEffect(() => {
-    restoreAuthToken().finally(() => setIsAuthReady(true));
+    let isMounted = true;
+    restoreAuthToken().finally(() => {
+      if (isMounted) {
+        setIsAuthReady(true);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   if (!isAuthReady) {

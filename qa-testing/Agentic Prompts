@@ -1,0 +1,30 @@
+Using the project context above, perform an integration pass for the completed validation, loading, API-error, and network-error work.
+
+Test this flow:
+1. Start the Django backend.
+2. Verify the health endpoint.
+3. Log in with valid credentials.
+4. Verify the token is stored.
+5. Restart or reload the mobile app.
+6. Verify login persistence restores the session.
+7. Open an API-backed screen.
+8. Verify initial loading, success, and empty states.
+9. Submit invalid form data and verify client-side validation.
+10. Submit valid data and verify the API response.
+11. Stop the backend and verify the network-error state.
+12. Restart the backend and verify retry recovery.
+13. Force a 401 response and verify token clearing and redirect to login.
+14. Use the development-only Testing Bypass and verify static UI access without sending a fake token.
+15. Use logout and verify persisted login is removed.
+
+Record:
+- Commands used
+- Test environment
+- Passed cases
+- Failed cases
+- Blocked cases
+- Reproduction steps for failures
+- Files changed
+- Remaining risks
+
+Do not mark the integration pass complete if the backend cannot start or if tests are skipped.

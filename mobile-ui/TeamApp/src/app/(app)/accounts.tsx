@@ -13,6 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { required, validatePositiveMinorUnits } from '@/services/validation';
 
 type Account = {
   id: number;
@@ -23,9 +24,9 @@ type Account = {
 };
 
 const initialAccounts: Account[] = [
-  { id: 1, name: 'Checking Account', type: 'Checking', balance: 4250.75, last4: '1842' },
-  { id: 2, name: 'Savings Account', type: 'Savings', balance: 6300, last4: '9077' },
-  { id: 3, name: 'Credit Card', type: 'Credit', balance: -248.2, last4: '3319' },
+  { id: 1, name: 'Checking Account', type: 'Checking', balance: 425075, last4: '1842' },
+  { id: 2, name: 'Savings Account', type: 'Savings', balance: 630000, last4: '9077' },
+  { id: 3, name: 'Credit Card', type: 'Credit', balance: -24820, last4: '3319' },
 ];
 
 type ModalMode = 'details' | 'edit' | 'add';
@@ -38,6 +39,7 @@ export default function AccountsScreen() {
   const [type, setType] = useState('Checking');
   const [balance, setBalance] = useState('');
   const [balanceIsNegative, setBalanceIsNegative] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string; balance?: string }>({});
 
   const openDetails = (account: Account) => {
     setSelectedAccount(account);
@@ -48,8 +50,9 @@ export default function AccountsScreen() {
     setSelectedAccount(account);
     setName(account.name);
     setType(account.type);
-    setBalance(Math.abs(account.balance).toFixed(2));
+    setBalance(Math.abs(account.balance).toString());
     setBalanceIsNegative(account.balance < 0);
+    setFieldErrors({});
     setModalMode('edit');
   };
 
@@ -59,6 +62,7 @@ export default function AccountsScreen() {
     setType('Checking');
     setBalance('');
     setBalanceIsNegative(false);
+    setFieldErrors({});
     setModalMode('add');
   };
 
@@ -95,7 +99,16 @@ export default function AccountsScreen() {
   };
 
   const saveAccount = () => {
-    const absoluteBalance = Math.abs(Number.parseFloat(balance) || 0);
+    const nextErrors = {
+      name: required(name, 'Account name'),
+      balance: validatePositiveMinorUnits(balance, 'Balance'),
+    };
+    if (nextErrors.name || nextErrors.balance) {
+      setFieldErrors(nextErrors);
+      return;
+    }
+
+    const absoluteBalance = Number(balance.trim());
     const parsedBalance = balanceIsNegative ? -absoluteBalance : absoluteBalance;
 
     if (modalMode === 'edit' && selectedAccount) {
@@ -199,8 +212,13 @@ export default function AccountsScreen() {
                   style={styles.input}
                   value={name}
                   onChangeText={setName}
+                  onChange={(event) => {
+                    setName(event.nativeEvent.text);
+                    setFieldErrors((current) => ({ ...current, name: undefined }));
+                  }}
                   placeholder="e.g. Emergency Fund"
                 />
+                {fieldErrors.name ? <Text style={styles.fieldError}>{fieldErrors.name}</Text> : null}
 
                 <Text style={styles.inputLabel}>Account type</Text>
                 <View style={styles.typeOptions}>
@@ -221,10 +239,15 @@ export default function AccountsScreen() {
                   style={styles.input}
                   value={balance}
                   onChangeText={setBalance}
-                  placeholder="0.00"
+                  onChange={(event) => {
+                    setBalance(event.nativeEvent.text);
+                    setFieldErrors((current) => ({ ...current, balance: undefined }));
+                  }}
+                  placeholder="e.g. 425075"
                   keyboardType="decimal-pad"
                   blurOnSubmit
                 />
+                {fieldErrors.balance ? <Text style={styles.fieldError}>{fieldErrors.balance}</Text> : null}
 
                 <Pressable
                   style={[styles.signButton, balanceIsNegative && styles.negativeSignButton]}
@@ -256,7 +279,7 @@ export default function AccountsScreen() {
 }
 
 function formatCurrency(value: number) {
-  return `${value < 0 ? '-' : ''}$${Math.abs(value).toFixed(2)}`;
+  return `${value < 0 ? '-' : ''}$${(Math.abs(value) / 100).toFixed(2)}`;
 }
 
 const styles = StyleSheet.create({
@@ -304,4 +327,5 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: '#fff', fontWeight: 'bold' },
   deleteButton: { borderWidth: 1, borderColor: '#dc2626', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 12 },
   deleteButtonText: { color: '#dc2626', fontWeight: 'bold' },
+  fieldError: { color: '#b91c1c', marginTop: 4 },
 });

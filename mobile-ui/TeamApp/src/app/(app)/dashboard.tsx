@@ -1,12 +1,17 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { router } from "expo-router";
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from "react-native";
 
 import { logout } from "@/services/auth";
 
 export default function DashboardScreen() {
+    const isMounted = useRef(true);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [message, setMessage] = useState("");
+
+    useEffect(() => () => {
+        isMounted.current = false;
+    }, []);
 
     async function handleLogout() {
         if (isLoggingOut) {
@@ -17,11 +22,17 @@ export default function DashboardScreen() {
         setMessage("");
         try {
             await logout();
-            router.replace("/login");
+            if (isMounted.current) {
+                router.replace("/login");
+            }
         } catch {
-            setMessage("We couldn't complete logout. Please try again.");
+            if (isMounted.current) {
+                setMessage("We couldn't complete logout. Please try again.");
+            }
         } finally {
-            setIsLoggingOut(false);
+            if (isMounted.current) {
+                setIsLoggingOut(false);
+            }
         }
     }
 

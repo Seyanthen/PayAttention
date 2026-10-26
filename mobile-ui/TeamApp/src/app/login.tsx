@@ -1,15 +1,22 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from "react-native";
 import { router } from "expo-router";
 
 import { getApiErrorMessage, login } from "@/services/api";
 import { enableMockAuthentication } from "@/services/auth";
+import { required } from "@/services/validation";
 
 export default function LoginScreen() {
+    const isMounted = useRef(true);
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [message, setMessage] = useState("");
+    const [fieldErrors, setFieldErrors] = useState<{ username?: string; password?: string }>({});
     const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => () => {
+        isMounted.current = false;
+    }, []);
 
     function handleTestingBypass() {
         if (enableMockAuthentication()) {
@@ -22,21 +29,33 @@ export default function LoginScreen() {
             return;
         }
 
-        if (!username.trim() || !password) {
-            setMessage("Enter a username and password.");
+        const nextErrors = {
+            username: required(username, "Username"),
+            password: required(password, "Password"),
+        };
+        if (nextErrors.username || nextErrors.password) {
+            setFieldErrors(nextErrors);
+            setMessage("Please correct the highlighted fields.");
             return;
         }
 
+        setFieldErrors({});
         setMessage("");
         setIsLoading(true);
 
         try {
             await login(username.trim(), password);
-            router.replace("/(app)/dashboard" as any);
+            if (isMounted.current) {
+                router.replace("/(app)/dashboard" as any);
+            }
         } catch (error) {
-            setMessage(getApiErrorMessage(error, "Login failed. Please try again."));
+            if (isMounted.current) {
+                setMessage(getApiErrorMessage(error, "Login failed. Please try again."));
+            }
         } finally {
-            setIsLoading(false);
+            if (isMounted.current) {
+                setIsLoading(false);
+            }
         }
     }
 
@@ -49,19 +68,27 @@ export default function LoginScreen() {
                 style={styles.input}
                 placeholder="Username"
                 value={username}
-                onChangeText={setUsername}
+                onChange={(event) => {
+                    setUsername(event.nativeEvent.text);
+                    setFieldErrors((current) => ({ ...current, username: undefined }));
+                }}
                 autoCapitalize="none"
                 editable={!isLoading}
             />
+            {fieldErrors.username ? <Text style={styles.fieldError}>{fieldErrors.username}</Text> : null}
             <TextInput
                 style={styles.input}
                 placeholder="Password"
                 secureTextEntry
                 value={password}
-                onChangeText={setPassword}
+                onChange={(event) => {
+                    setPassword(event.nativeEvent.text);
+                    setFieldErrors((current) => ({ ...current, password: undefined }));
+                }}
                 autoCapitalize="none"
                 editable={!isLoading}
             />
+            {fieldErrors.password ? <Text style={styles.fieldError}>{fieldErrors.password}</Text> : null}
 
             <Pressable
                 style={[styles.button, isLoading && styles.buttonDisabled]}
@@ -127,5 +154,10 @@ const styles = StyleSheet.create({
 
     message: {
         marginTop: 12,
+    },
+
+    fieldError: {
+        marginTop: 4,
+        color: "#b91c1c",
     },
 });
