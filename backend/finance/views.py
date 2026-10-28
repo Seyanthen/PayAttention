@@ -1,9 +1,11 @@
 from calendar import monthrange
 from datetime import date
+import re
 
 from django.http import JsonResponse
 from django.utils import timezone
-from rest_framework import permissions, status, viewsets
+from django.db.models import Q
+from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
@@ -41,6 +43,66 @@ class CategoryViewSet(OwnedModelViewSet):
 class TransactionViewSet(OwnedModelViewSet):
     queryset = Transaction.objects.select_related("account", "category", "transfer_account")
     serializer_class = TransactionSerializer
+
+    @staticmethod
+    def _parse_id(value, field_name):
+        if not re.fullmatch(r"[1-9]\d*", value or ""):
+            raise serializers.ValidationError({field_name: "Must be a positive integer ID."})
+        return int(value)
+
+    @staticmethod
+    def _parse_date(value, field_name):
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value or ""):
+            raise serializers.ValidationError({field_name: "Must use YYYY-MM-DD format."})
+        try:
+            return date.fromisoformat(value)
+        except ValueError as exc:
+            raise serializers.ValidationError({field_name: "Must be a valid calendar date."}) from exc
+
+    @staticmethod
+    def _parse_minor_units(value, field_name):
+        if not re.fullmatch(r"\d+", value or ""):
+            raise serializers.ValidationError({field_name: "Must be a non-negative integer number of minor units."})
+        return int(value)
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        params = self.request.query_params
+
+        search = params.get("search", "").strip()
+        if search:
+            queryset = queryset.filter(Q(merchant__icontains=search) | Q(note__icontains=search))
+
+        if params.get("account"):
+            queryset = queryset.filter(account_id=self._parse_id(params.get("account"), "account"))
+        if params.get("category"):
+            queryset = queryset.filter(category_id=self._parse_id(params.get("category"), "category"))
+        if params.get("transaction_type"):
+            transaction_type = params.get("transaction_type")
+            valid_types = {choice for choice, _ in Transaction.TransactionType.choices}
+            if transaction_type not in valid_types:
+                raise serializers.ValidationError({"transaction_type": "Unsupported transaction type."})
+            queryset = queryset.filter(transaction_type=transaction_type)
+
+        start_date = self._parse_date(params.get("start_date"), "start_date") if params.get("start_date") else None
+        end_date = self._parse_date(params.get("end_date"), "end_date") if params.get("end_date") else None
+        if start_date and end_date and end_date < start_date:
+            raise serializers.ValidationError({"end_date": "Must be on or after start_date."})
+        if start_date:
+            queryset = queryset.filter(occurred_on__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(occurred_on__lte=end_date)
+
+        min_amount = self._parse_minor_units(params.get("min_amount_minor"), "min_amount_minor") if params.get("min_amount_minor") else None
+        max_amount = self._parse_minor_units(params.get("max_amount_minor"), "max_amount_minor") if params.get("max_amount_minor") else None
+        if min_amount is not None and max_amount is not None and min_amount > max_amount:
+            raise serializers.ValidationError({"max_amount_minor": "Must be greater than or equal to min_amount_minor."})
+        if min_amount is not None:
+            queryset = queryset.filter(amount_minor__gte=min_amount)
+        if max_amount is not None:
+            queryset = queryset.filter(amount_minor__lte=max_amount)
+
+        return queryset
 
     def perform_create(self, serializer):
         data = serializer.validated_data

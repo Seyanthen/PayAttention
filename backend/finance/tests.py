@@ -117,6 +117,112 @@ class FinanceApiTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("account", response.data)
 
+    def test_transaction_filters_search_and_combined_fields(self):
+        savings_account = Account.objects.create(owner=self.user, name="Filter Savings", opening_balance_minor=0)
+        matching = Transaction.objects.create(
+            owner=self.user,
+            account=self.account,
+            category=self.expense_category,
+            transaction_type="expense",
+            amount_minor=2500,
+            occurred_on=date(2026, 9, 1),
+            merchant="Walmart",
+            note="September groceries",
+        )
+        Transaction.objects.create(
+            owner=self.user,
+            account=savings_account,
+            category=self.expense_category,
+            transaction_type="expense",
+            amount_minor=5000,
+            occurred_on=date(2026, 9, 15),
+            merchant="Market",
+            note="walmart gift card",
+        )
+        Transaction.objects.create(
+            owner=self.user,
+            account=self.account,
+            category=self.income_category,
+            transaction_type="income",
+            amount_minor=10000,
+            occurred_on=date(2026, 9, 10),
+            merchant="Walmart payroll",
+        )
+        Transaction.objects.create(
+            owner=self.other_user,
+            account=self.other_account,
+            transaction_type="expense",
+            amount_minor=2500,
+            occurred_on=date(2026, 9, 1),
+            merchant="Walmart",
+        )
+
+        response = self.client.get(reverse("transaction-list"), {
+            "search": "walmart",
+            "account": self.account.id,
+            "category": self.expense_category.id,
+            "transaction_type": "expense",
+            "start_date": "2026-09-01",
+            "end_date": "2026-09-30",
+            "min_amount_minor": "2500",
+            "max_amount_minor": "10000",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([row["id"] for row in response.data], [matching.id])
+
+        note_response = self.client.get(reverse("transaction-list"), {"search": "gift card"})
+        self.assertEqual(note_response.status_code, 200)
+        self.assertEqual(len(note_response.data), 1)
+        self.assertEqual(note_response.data[0]["account"], savings_account.id)
+
+    def test_transaction_filters_include_boundaries_and_can_return_empty(self):
+        lower = Transaction.objects.create(
+            owner=self.user,
+            account=self.account,
+            category=self.expense_category,
+            transaction_type="expense",
+            amount_minor=2500,
+            occurred_on=date(2026, 9, 1),
+        )
+        upper = Transaction.objects.create(
+            owner=self.user,
+            account=self.account,
+            category=self.expense_category,
+            transaction_type="expense",
+            amount_minor=10000,
+            occurred_on=date(2026, 9, 30),
+        )
+        response = self.client.get(reverse("transaction-list"), {
+            "start_date": "2026-09-01",
+            "end_date": "2026-09-30",
+            "min_amount_minor": "2500",
+            "max_amount_minor": "10000",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual({row["id"] for row in response.data}, {lower.id, upper.id})
+
+        empty_response = self.client.get(reverse("transaction-list"), {"search": "does-not-exist"})
+        self.assertEqual(empty_response.status_code, 200)
+        self.assertEqual(empty_response.data, [])
+
+    def test_transaction_filters_reject_invalid_values_and_require_authentication(self):
+        invalid_queries = [
+            {"start_date": "09/01/2026"},
+            {"end_date": "2026-02-30"},
+            {"min_amount_minor": "-1"},
+            {"max_amount_minor": "1.5"},
+            {"min_amount_minor": "100", "max_amount_minor": "10"},
+            {"transaction_type": "unknown"},
+            {"account": "not-an-id"},
+        ]
+        for query in invalid_queries:
+            response = self.client.get(reverse("transaction-list"), query)
+            self.assertEqual(response.status_code, 400, query)
+
+        self.client.force_authenticate(user=None)
+        response = self.client.get(reverse("transaction-list"))
+        self.assertEqual(response.status_code, 401)
+
     def test_transaction_update_cannot_change_to_foreign_account(self):
         transaction = Transaction.objects.create(
             owner=self.user,

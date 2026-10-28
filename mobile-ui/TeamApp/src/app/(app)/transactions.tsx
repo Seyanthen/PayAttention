@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -11,8 +11,10 @@ import {
   Text,
   TextInput,
   View,
+  ActivityIndicator,
 } from 'react-native';
-import { validateTransaction, type ValidationErrors } from '@/services/validation';
+import { authenticatedGet, getApiErrorMessage } from '@/services/api';
+import { validateTransaction, validateTransactionFilters, type ValidationErrors } from '@/services/validation';
 
 type TransactionKind = 'expense' | 'income' | 'transfer';
 
@@ -27,17 +29,44 @@ type Transaction = {
   kind: TransactionKind;
 };
 
-const initialTransactions: Transaction[] = [
-  { id: 1, merchant: 'Walmart', amount: 7231, category: 'Groceries', account: 'Checking Account', date: '2026-10-19', notes: 'Weekly groceries', kind: 'expense' },
-  { id: 2, merchant: 'Paycheck', amount: 185000, category: 'Income', account: 'Checking Account', date: '2026-10-18', notes: '', kind: 'income' },
-  { id: 3, merchant: 'Spotify', amount: 1199, category: 'Entertainment', account: 'Credit Card', date: '2026-10-17', notes: 'Monthly subscription', kind: 'expense' },
-  { id: 4, merchant: 'Gas Station', amount: 4820, category: 'Transportation', account: 'Checking Account', date: '2026-10-15', notes: '', kind: 'expense' },
-];
+type ApiTransaction = {
+  id: number;
+  account: number;
+  category: number | null;
+  transaction_type: TransactionKind;
+  amount_minor: number;
+  occurred_on: string;
+  merchant: string;
+  note: string;
+};
+
+type Lookup = { id: number; name: string; category_type?: 'expense' | 'income' };
+
+type TransactionFilters = {
+  search: string;
+  account: string;
+  category: string;
+  transactionType: '' | TransactionKind;
+  startDate: string;
+  endDate: string;
+  minAmountMinor: string;
+  maxAmountMinor: string;
+};
+
+const initialTransactions: Transaction[] = [];
 
 const categories = ['Food', 'Groceries', 'Transportation', 'Bills', 'Entertainment', 'Shopping', 'Income', 'Other'];
 
 export default function TransactionsScreen() {
+  const isMounted = useRef(true);
   const [transactions, setTransactions] = useState(initialTransactions);
+  const [accounts, setAccounts] = useState<Lookup[]>([]);
+  const [lookupCategories, setLookupCategories] = useState<Lookup[]>([]);
+  const [filters, setFilters] = useState<TransactionFilters>({ search: '', account: '', category: '', transactionType: '', startDate: '', endDate: '', minAmountMinor: '', maxAmountMinor: '' });
+  const [filterErrors, setFilterErrors] = useState<ValidationErrors>({});
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isAddVisible, setIsAddVisible] = useState(false);
   const [isHistoryVisible, setIsHistoryVisible] = useState(false);
@@ -50,6 +79,88 @@ export default function TransactionsScreen() {
   const [notes, setNotes] = useState('');
   const [transferAccount, setTransferAccount] = useState('');
   const [fieldErrors, setFieldErrors] = useState<ValidationErrors>({});
+
+  useEffect(() => () => {
+    isMounted.current = false;
+  }, []);
+
+  function transactionFromApi(row: ApiTransaction, accountRows: Lookup[], categoryRows: Lookup[]): Transaction {
+    return {
+      id: row.id,
+      merchant: row.merchant || 'Untitled transaction',
+      amount: row.amount_minor,
+      category: categoryRows.find((item) => item.id === row.category)?.name ?? 'Uncategorized',
+      account: accountRows.find((item) => item.id === row.account)?.name ?? `Account ${row.account}`,
+      date: row.occurred_on,
+      notes: row.note,
+      kind: row.transaction_type,
+    };
+  }
+
+  function queryFor(nextFilters = filters) {
+    const query = new URLSearchParams();
+    if (nextFilters.search.trim()) query.set('search', nextFilters.search.trim());
+    if (nextFilters.account) query.set('account', nextFilters.account);
+    if (nextFilters.category) query.set('category', nextFilters.category);
+    if (nextFilters.transactionType) query.set('transaction_type', nextFilters.transactionType);
+    if (nextFilters.startDate.trim()) query.set('start_date', nextFilters.startDate.trim());
+    if (nextFilters.endDate.trim()) query.set('end_date', nextFilters.endDate.trim());
+    if (nextFilters.minAmountMinor.trim()) query.set('min_amount_minor', nextFilters.minAmountMinor.trim());
+    if (nextFilters.maxAmountMinor.trim()) query.set('max_amount_minor', nextFilters.maxAmountMinor.trim());
+    return query.toString();
+  }
+
+  async function loadTransactions(refresh: boolean, nextFilters = filters) {
+    if (refresh) setIsRefreshing(true);
+    else setIsInitialLoading(true);
+    setLoadError('');
+    try {
+      const suffix = queryFor(nextFilters);
+      const [transactionResponse, accountResponse, categoryResponse] = await Promise.all([
+        authenticatedGet(`/transactions/${suffix ? `?${suffix}` : ''}`),
+        authenticatedGet('/accounts/'),
+        authenticatedGet('/categories/'),
+      ]);
+      const [transactionRows, accountRows, categoryRows] = await Promise.all([
+        transactionResponse.json() as Promise<unknown>,
+        accountResponse.json() as Promise<unknown>,
+        categoryResponse.json() as Promise<unknown>,
+      ]);
+      if (!Array.isArray(transactionRows) || !Array.isArray(accountRows) || !Array.isArray(categoryRows)) {
+        throw new Error('Invalid transaction response.');
+      }
+      if (!isMounted.current) return;
+      const typedAccounts = accountRows as Lookup[];
+      const typedCategories = categoryRows as Lookup[];
+      setAccounts(typedAccounts);
+      setLookupCategories(typedCategories);
+      setTransactions((transactionRows as ApiTransaction[]).map((row) => transactionFromApi(row, typedAccounts, typedCategories)));
+    } catch (error) {
+      if (isMounted.current) setLoadError(getApiErrorMessage(error, 'Unable to load transactions. Please try again.'));
+    } finally {
+      if (isMounted.current) {
+        setIsInitialLoading(false);
+        setIsRefreshing(false);
+      }
+    }
+  }
+
+  useEffect(() => {
+    void loadTransactions(false);
+  }, []);
+
+  const applyFilters = () => {
+    const nextErrors = validateTransactionFilters(filters);
+    setFilterErrors(nextErrors);
+    if (Object.keys(nextErrors).length === 0) void loadTransactions(true);
+  };
+
+  const clearFilters = () => {
+    const cleared: TransactionFilters = { search: '', account: '', category: '', transactionType: '', startDate: '', endDate: '', minAmountMinor: '', maxAmountMinor: '' };
+    setFilters(cleared);
+    setFilterErrors({});
+    void loadTransactions(true, cleared);
+  };
 
   const totals = useMemo(() => transactions.reduce(
     (summary, transaction) => {
@@ -97,6 +208,44 @@ export default function TransactionsScreen() {
           <Pressable accessibilityRole="button" style={styles.addButton} onPress={openAdd}><Text style={styles.addButtonText}>+ Add</Text></Pressable>
         </View>
 
+        <View style={styles.filterCard}>
+          <Text style={styles.filterTitle}>Search and filter</Text>
+          <TextInput
+            accessibilityLabel="Search transactions"
+            style={styles.input}
+            value={filters.search}
+            onChangeText={(value) => setFilters((current) => ({ ...current, search: value }))}
+            placeholder="Search merchant or note"
+          />
+          <Text style={styles.inputLabel}>Account</Text>
+          <View style={styles.optionRow}>
+            <Pressable style={[styles.optionButton, !filters.account && styles.selectedOption]} onPress={() => setFilters((current) => ({ ...current, account: '' }))}><Text style={styles.optionText}>All</Text></Pressable>
+            {accounts.map((option) => <Pressable key={option.id} style={[styles.optionButton, filters.account === String(option.id) && styles.selectedOption]} onPress={() => setFilters((current) => ({ ...current, account: String(option.id) }))}><Text style={styles.optionText}>{option.name}</Text></Pressable>)}
+          </View>
+          <Text style={styles.inputLabel}>Category</Text>
+          <View style={styles.optionRow}>
+            <Pressable style={[styles.optionButton, !filters.category && styles.selectedOption]} onPress={() => setFilters((current) => ({ ...current, category: '' }))}><Text style={styles.optionText}>All</Text></Pressable>
+            {lookupCategories.map((option) => <Pressable key={option.id} style={[styles.optionButton, filters.category === String(option.id) && styles.selectedOption]} onPress={() => setFilters((current) => ({ ...current, category: String(option.id) }))}><Text style={styles.optionText}>{option.name}</Text></Pressable>)}
+          </View>
+          <Text style={styles.inputLabel}>Type</Text>
+          <View style={styles.optionRow}>{(['', 'expense', 'income', 'transfer'] as const).map((option) => <Pressable key={option || 'all'} style={[styles.optionButton, filters.transactionType === option && styles.selectedOption]} onPress={() => setFilters((current) => ({ ...current, transactionType: option }))}><Text style={styles.optionText}>{option ? option[0].toUpperCase() + option.slice(1) : 'All'}</Text></Pressable>)}</View>
+          <View style={styles.filterColumns}>
+            <View style={styles.filterColumn}><Text style={styles.inputLabel}>Start date</Text><TextInput style={styles.input} value={filters.startDate} onChangeText={(value) => { setFilters((current) => ({ ...current, startDate: value })); setFilterErrors((current) => ({ ...current, startDate: undefined })); }} placeholder="YYYY-MM-DD" />{filterErrors.startDate ? <Text style={styles.fieldError}>{filterErrors.startDate}</Text> : null}</View>
+            <View style={styles.filterColumn}><Text style={styles.inputLabel}>End date</Text><TextInput style={styles.input} value={filters.endDate} onChangeText={(value) => { setFilters((current) => ({ ...current, endDate: value })); setFilterErrors((current) => ({ ...current, endDate: undefined })); }} placeholder="YYYY-MM-DD" />{filterErrors.endDate ? <Text style={styles.fieldError}>{filterErrors.endDate}</Text> : null}</View>
+          </View>
+          <View style={styles.filterColumns}>
+            <View style={styles.filterColumn}><Text style={styles.inputLabel}>Minimum amount (minor units)</Text><TextInput style={styles.input} value={filters.minAmountMinor} onChangeText={(value) => { setFilters((current) => ({ ...current, minAmountMinor: value })); setFilterErrors((current) => ({ ...current, minAmountMinor: undefined, maxAmountMinor: undefined })); }} placeholder="2500" keyboardType="number-pad" />{filterErrors.minAmountMinor ? <Text style={styles.fieldError}>{filterErrors.minAmountMinor}</Text> : null}</View>
+            <View style={styles.filterColumn}><Text style={styles.inputLabel}>Maximum amount (minor units)</Text><TextInput style={styles.input} value={filters.maxAmountMinor} onChangeText={(value) => { setFilters((current) => ({ ...current, maxAmountMinor: value })); setFilterErrors((current) => ({ ...current, maxAmountMinor: undefined })); }} placeholder="10000" keyboardType="number-pad" />{filterErrors.maxAmountMinor ? <Text style={styles.fieldError}>{filterErrors.maxAmountMinor}</Text> : null}</View>
+          </View>
+          <View style={styles.filterActions}>
+            <Pressable accessibilityRole="button" style={[styles.primaryButton, isRefreshing && styles.buttonDisabled]} onPress={applyFilters} disabled={isRefreshing}>{isRefreshing ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Apply filters</Text>}</Pressable>
+            <Pressable accessibilityRole="button" style={styles.clearButton} onPress={clearFilters} disabled={isRefreshing}><Text style={styles.clearButtonText}>Clear</Text></Pressable>
+          </View>
+        </View>
+
+        {isInitialLoading ? <View style={styles.loadingState}><ActivityIndicator accessibilityLabel="Loading transactions" /><Text style={styles.stateText}>Loading transactions…</Text></View> : null}
+        {loadError ? <View style={styles.errorState}><Text style={styles.errorText}>{loadError}</Text><Pressable accessibilityRole="button" style={styles.retryButton} onPress={() => void loadTransactions(true)} disabled={isRefreshing}><Text style={styles.retryButtonText}>{isRefreshing ? 'Retrying…' : 'Retry'}</Text></Pressable></View> : null}
+
         <View style={styles.summaryCard}>
           <View><Text style={styles.summaryLabel}>Net Income</Text><Text style={styles.summaryValue}>{formatCurrency(totals.income - totals.expenses)}</Text></View>
           <View style={styles.summaryDivider} />
@@ -104,15 +253,15 @@ export default function TransactionsScreen() {
         </View>
 
         <Text style={styles.sectionTitle}>Recent transactions</Text>
-        {transactions.slice(0, 10).map((transaction) => (
+        {!isInitialLoading && !loadError && transactions.slice(0, 10).map((transaction) => (
           <Pressable accessibilityRole="button" key={transaction.id} style={({ pressed }) => [styles.transactionCard, pressed && styles.pressed]} onPress={() => setSelectedTransaction(transaction)}>
             <View style={styles.transactionIcon}><Text style={styles.transactionIconText}>{transaction.kind === 'income' ? '+' : '−'}</Text></View>
             <View style={styles.transactionInfo}><Text style={styles.merchant}>{transaction.merchant}</Text><Text style={styles.transactionMeta}>{transaction.category} · {transaction.date}</Text></View>
             <Text style={[styles.transactionAmount, transaction.kind === 'income' && styles.incomeText]}>{transaction.kind === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}</Text>
           </Pressable>
         ))}
-        {transactions.length === 0 && <Text style={styles.emptyState}>No transactions yet. Add your first one above.</Text>}
-        {transactions.length > 0 && (
+        {!isInitialLoading && !loadError && transactions.length === 0 && <Text style={styles.emptyState}>No transactions match the current filters.</Text>}
+        {!isInitialLoading && !loadError && transactions.length > 0 && (
           <Pressable accessibilityRole="button" style={styles.historyButton} onPress={() => setIsHistoryVisible(true)}>
             <Text style={styles.historyButtonText}>Full Transaction History</Text>
           </Pressable>
@@ -181,6 +330,20 @@ const styles = StyleSheet.create({
   modalBackdrop: { flex: 1, justifyContent: 'center', paddingHorizontal: 16, backgroundColor: 'rgba(15, 23, 42, 0.45)' }, keyboardContainer: { width: '100%' }, modalCard: { backgroundColor: '#fff', borderRadius: 20, padding: 24, maxHeight: '90%', minHeight: 373 }, modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }, modalTitle: { fontSize: 24, fontWeight: 'bold', color: '#0f172a' }, closeText: { color: '#2563eb', fontWeight: '600' }, detailsScrollView: { flexGrow: 0 }, detailsContent: { paddingBottom: 12 }, historyScrollView: { flexGrow: 0 }, historyContent: { paddingBottom: 12 }, historyTableHeader: { flexDirection: 'row', alignItems: 'center', paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#cbd5e1' }, historyHeaderText: { color: '#64748b', fontSize: 12, fontWeight: '700', textTransform: 'uppercase' }, historyTableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }, historyDateColumn: { width: 82 }, historyTitleColumn: { flex: 1, marginRight: 16 }, historyDate: { color: '#64748b', fontSize: 12 }, historyTitle: { color: '#0f172a', fontWeight: '600', flex: 1, marginRight: 16 }, historyAmountColumn: { width: 78, textAlign: 'right' }, historyAmount: { color: '#dc2626', fontWeight: '700' }, detailHero: { backgroundColor: '#f8fafc', borderRadius: 12, padding: 18, marginBottom: 12 }, detailMerchant: { color: '#0f172a', fontSize: 20, fontWeight: 'bold', marginBottom: 8 }, detailAmount: { color: '#dc2626', fontSize: 28, fontWeight: 'bold' }, detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }, detailLabel: { color: '#64748b' }, detailValue: { color: '#0f172a', fontWeight: '600', maxWidth: '60%', textAlign: 'right' },
   inputLabel: { color: '#334155', fontWeight: '600', marginBottom: 6, marginTop: 12 }, input: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, padding: 12, color: '#0f172a', backgroundColor: '#fff' }, notesInput: { minHeight: 76, textAlignVertical: 'top' }, optionRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' }, categoryRow: { gap: 8, paddingVertical: 2 }, optionButton: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingVertical: 9, paddingHorizontal: 12 }, categoryButton: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 16, paddingVertical: 8, paddingHorizontal: 12 }, accountButton: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingVertical: 9, paddingHorizontal: 12 }, selectedOption: { backgroundColor: '#dbeafe', borderColor: '#2563eb' }, optionText: { color: '#475569' }, selectedOptionText: { color: '#1d4ed8', fontWeight: '600' }, primaryButton: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 24, marginBottom: 12 }, primaryButtonText: { color: '#fff', fontWeight: 'bold' },
   fieldError: { color: '#b91c1c', marginTop: 4 },
+  filterCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: '#e2e8f0' },
+  filterTitle: { color: '#0f172a', fontSize: 18, fontWeight: '700', marginBottom: 4 },
+  filterColumns: { flexDirection: 'row', gap: 10 },
+  filterColumn: { flex: 1 },
+  filterActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  clearButton: { padding: 14, marginTop: 24 },
+  clearButtonText: { color: '#2563eb', fontWeight: '700' },
+  loadingState: { alignItems: 'center', paddingVertical: 28, gap: 8 },
+  stateText: { color: '#64748b' },
+  errorState: { alignItems: 'center', padding: 16, marginBottom: 16, backgroundColor: '#fef2f2', borderRadius: 10 },
+  errorText: { color: '#b91c1c', textAlign: 'center' },
+  retryButton: { borderWidth: 1, borderColor: '#b91c1c', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 9, marginTop: 10 },
+  retryButtonText: { color: '#b91c1c', fontWeight: '700' },
+  buttonDisabled: { opacity: 0.65 },
 });
 // view transactions
 // add transactions
