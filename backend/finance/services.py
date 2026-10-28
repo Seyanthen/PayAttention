@@ -1,3 +1,4 @@
+from calendar import monthrange
 from datetime import date
 
 from django.db.models import Q, Sum
@@ -66,12 +67,68 @@ def user_total_balance_minor(user) -> int:
     return sum(account_balance_minor(account) for account in Account.objects.filter(owner=user))
 
 
+def account_balances_minor(user) -> list[dict]:
+    """Return each owned account with its calculated current balance."""
+
+    return [
+        {"account_id": account.id, "account_name": account.name, "balance_minor": account_balance_minor(account)}
+        for account in Account.objects.filter(owner=user).order_by("name", "id")
+    ]
+
+
+def user_total_assets_minor(user) -> int:
+    """Return balances for asset accounts, excluding credit liabilities."""
+
+    return sum(
+        account_balance_minor(account)
+        for account in Account.objects.filter(owner=user).exclude(account_type=Account.AccountType.CREDIT)
+    )
+
+
+def _user_transaction_total_minor(user, transaction_type: str, period_start: date | None = None, period_end: date | None = None) -> int:
+    transactions = Transaction.objects.filter(owner=user, transaction_type=transaction_type)
+    if period_start is not None:
+        transactions = transactions.filter(occurred_on__gte=period_start)
+    if period_end is not None:
+        transactions = transactions.filter(occurred_on__lte=period_end)
+    return transactions.aggregate(total=Sum("amount_minor"))["total"] or 0
+
+
+def income_minor(user, period_start: date | None = None, period_end: date | None = None) -> int:
+    """Return a user's income in an optional inclusive date range."""
+
+    return _user_transaction_total_minor(user, Transaction.TransactionType.INCOME, period_start, period_end)
+
+
+def expenses_minor(user, period_start: date | None = None, period_end: date | None = None) -> int:
+    """Return a user's expenses in an optional inclusive date range."""
+
+    return _user_transaction_total_minor(user, Transaction.TransactionType.EXPENSE, period_start, period_end)
+
+
+def monthly_income_minor(user, year: int, month: int) -> int:
+    start = date(year, month, 1)
+    end = date(year, month, monthrange(year, month)[1])
+    return income_minor(user, start, end)
+
+
+def monthly_expenses_minor(user, year: int, month: int) -> int:
+    start = date(year, month, 1)
+    end = date(year, month, monthrange(year, month)[1])
+    return expenses_minor(user, start, end)
+
+
+def monthly_net_cash_flow_minor(user, year: int, month: int) -> int:
+    return monthly_income_minor(user, year, month) - monthly_expenses_minor(user, year, month)
+
+
 def budget_spent_minor(budget: Budget) -> int:
     return budget_spent_minor_for_period(budget, budget.period_start, budget.period_end)
 
 
 def budget_spent_minor_for_period(budget: Budget, period_start: date, period_end: date) -> int:
-    """Return expense totals for a budget during an inclusive reporting period."""
+    """Return expense totals for the inclusive overlap of two periods."""
+
     start = max(budget.period_start, period_start)
     end = min(budget.period_end, period_end)
     if end < start:
@@ -94,4 +151,71 @@ def spending_summary(user, period_start: date, period_end: date) -> dict:
     by_category = [{"category_id": row["category_id"], "category_name": row["category__name"], "total_minor": row["total_minor"]} for row in rows]
     return {"period_start": period_start, "period_end": period_end, "total_expenses_minor": sum(row["total_minor"] for row in by_category), "by_category": by_category}
 
+
+def financial_summary(user, period_start: date, period_end: date) -> dict:
+    """Return Sprint 2 account and period metrics for the authenticated user."""
+
+    if period_end < period_start:
+        raise ValueError("period_end must be on or after period_start")
+    spending = spending_summary(user, period_start, period_end)
+    total_income = income_minor(user, period_start, period_end)
+    total_expenses = spending["total_expenses_minor"]
+    return {
+        **spending,
+        "account_balances": account_balances_minor(user),
+        "total_balance_minor": user_total_balance_minor(user),
+        "total_assets_minor": user_total_assets_minor(user),
+        "total_income_minor": total_income,
+        "monthly_cash_flow_minor": total_income - total_expenses,
+    }
+
+
+# transactions for budget table 
+
+def budget_transactions(budget: Budget):
+    """Return expense transactions counted toward a budget."""
+    return Transaction.objects.filter(
+        owner=budget.owner,
+        category=budget.category,
+        transaction_type=Transaction.TransactionType.EXPENSE,
+        occurred_on__gte=budget.period_start,
+        occurred_on__lte=budget.period_end,
+    ).order_by("occurred_on", "created_at")
+
+def budget_performance(budget: Budget) -> dict:
+    """Return spending performance information for one budget."""
+    spent = budget_spent_minor(budget)
+    limit = budget.amount_minor
+    remaining = limit - spent
+
+    return {
+        "budget_id": budget.id,
+        "category": budget.category.name,
+        "limit_minor": limit,
+        "spent_minor": spent,
+        "remaining_minor": remaining,
+        "percentage_used": round((spent / limit) * 100, 2),
+        "over_budget": spent > limit,
+    }
+    
+    
+def over_budget_categories(user):
+    """Return the user's budgets where spending exceeded the limit."""
+    results = []
+
+    budgets = Budget.objects.filter(owner=user)
+
+    for budget in budgets:
+        spent = budget_spent_minor(budget)
+
+        if spent > budget.amount_minor:
+            results.append({
+                "budget_id": budget.id,
+                "category": budget.category.name,
+                "limit_minor": budget.amount_minor,
+                "spent_minor": spent,
+                "over_by_minor": spent - budget.amount_minor,
+            })
+
+    return results
 
