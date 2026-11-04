@@ -83,7 +83,7 @@ class Budget(TimeStampedModel):
         ordering = ["-period_start", "name"]
 
 class SavingsGoal(TimeStampedModel):
-    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="budgets")
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="saving_goals")
     name = models.CharField(max_length=120)
     target_amount = models.BigIntegerField(validators=[MinValueValidator(1)])
     current_amount = models.BigIntegerField(validators=[MinValueValidator(0)], default=0)
@@ -91,5 +91,9 @@ class SavingsGoal(TimeStampedModel):
     currency = models.CharField(max_length=3, default="USD")
     is_completed = models.BooleanField(default=False)
     
-    
+class GoalContribution(TimeStampedModel):
+    goal = models.ForeignKey(SavingsGoal, on_delete=models.CASCADE,
+        related_name="contributions")
+    amount_minor = models.BigIntegerField(validators=[MinValueValidator(1)])
+    contribution_date = models.DateField()
    
