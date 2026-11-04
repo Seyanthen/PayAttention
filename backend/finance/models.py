@@ -82,3 +82,14 @@ class Budget(TimeStampedModel):
         indexes = [models.Index(fields=["owner", "period_start", "period_end"])]
         ordering = ["-period_start", "name"]
 
+class SavingsGoal(TimeStampedModel):
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="budgets")
+    name = models.CharField(max_length=120)
+    target_amount = models.BigIntegerField(validators=[MinValueValidator(1)])
+    current_amount = models.BigIntegerField(validators=[MinValueValidator(0)], default=0)
+    target_date = models.DateField(null=True, blank=True)
+    currency = models.CharField(max_length=3, default="USD")
+    is_completed = models.BooleanField(default=False)
+    
+    
+   
