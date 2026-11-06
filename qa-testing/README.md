@@ -63,7 +63,7 @@ The backend tests currently contain 13 API cases covering integer-unit balance c
 
 QA owns the test inventory, execution evidence, regression plan, and defect reports. Backend, database, mobile, and finance leads own the behavior and contracts that QA verifies. Changes to financial rules must update the finance documentation and the corresponding QA cases together.
 
-# Login Integration
+# Frontend and Backend Commands
 Frontend start command:
     npx expo start 
 
@@ -76,5 +76,7 @@ Backend start command:
       python manage.py runserver
       
 To start in the Vitrual Environment (in powershell terminal in ...\backend)
+      .\.venv\Scripts\python.exe manage.py check
+      .\.venv\Scripts\python.exe manage.py test --keepdb --noinput
       .\.venv\Scripts\python.exe manage.py runserver
     

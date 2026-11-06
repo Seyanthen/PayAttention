@@ -11,6 +11,7 @@ import {
 } from "react-native";
 
 import { logout } from "@/services/auth";
+import { getApiErrorMessage, getRecurringTransactions, type RecurringTransaction } from "@/services/api";
 
 const spendingCategories = [
     { name: "Housing", percentage: 42, color: "#2563eb" },
@@ -33,10 +34,22 @@ export default function DashboardScreen() {
     const isMounted = useRef(true);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [message, setMessage] = useState("");
+    const [recurring, setRecurring] = useState<RecurringTransaction[]>([]);
+    const [recurringLoading, setRecurringLoading] = useState(true);
+    const [recurringError, setRecurringError] = useState("");
+
+    async function loadRecurring() {
+        setRecurringLoading(true); setRecurringError("");
+        try { setRecurring((await getRecurringTransactions()).slice(0, 4)); }
+        catch (error) { setRecurringError(getApiErrorMessage(error, "Unable to load recurring transactions.")); }
+        finally { setRecurringLoading(false); }
+    }
 
     useEffect(() => () => {
         isMounted.current = false;
     }, []);
+
+    useEffect(() => { void loadRecurring(); }, []);
 
     async function handleLogout() {
         if (isLoggingOut) return;
@@ -114,6 +127,15 @@ export default function DashboardScreen() {
                     </View>
                 </View>
 
+                <View style={styles.recurringCard} accessibilityLabel="Recurring Transactions">
+                    <View style={styles.chartHeader}><Text style={styles.chartTitle}>Recurring Transactions</Text><Text style={styles.chartCaption}>Upcoming scheduled activity</Text></View>
+                    {recurringLoading ? <ActivityIndicator accessibilityLabel="Loading recurring transactions" /> : null}
+                    {recurringError ? <View><Text style={styles.message}>{recurringError}</Text><Pressable onPress={() => void loadRecurring()}><Text style={styles.linkText}>Retry</Text></Pressable></View> : null}
+                    {!recurringLoading && !recurringError && recurring.length === 0 ? <Text style={styles.emptyText}>No recurring transactions yet.</Text> : null}
+                    {!recurringLoading && !recurringError && recurring.map((row) => <View key={row.id} style={styles.recurringRow}><View style={styles.recurringInfo}><Text style={styles.recurringName}>{row.name}</Text><Text style={styles.recurringMeta}>{row.frequency} · Next: {row.next_occurrence}</Text></View><Text style={[styles.recurringAmount, row.transaction_type === "income" ? styles.incomeText : styles.expenseText]}>{row.transaction_type === "income" ? "+" : "-"}${(row.amount_minor / 100).toFixed(2)}</Text></View>)}
+                    <View style={styles.recurringActions}><Pressable style={styles.secondaryButton} onPress={() => router.push({ pathname: "/recurring" } as never)}><Text style={styles.secondaryButtonText}>show more</Text></Pressable><Pressable style={styles.primarySmallButton} onPress={() => router.push({ pathname: "/recurring" } as never)}><Text style={styles.primarySmallButtonText}>add recurring transaction</Text></Pressable></View>
+                </View>
+
                 {message ? <Text style={styles.message}>{message}</Text> : null}
 
                 <Pressable
@@ -186,6 +208,19 @@ const styles = StyleSheet.create({
     trendBarTrack: { alignItems: "center", backgroundColor: "#eff6ff", borderRadius: 6, height: 112, justifyContent: "flex-end", overflow: "hidden", width: 24 },
     trendBar: { backgroundColor: "#2563eb", borderRadius: 6, minHeight: 8, width: "100%" },
     trendMonth: { color: "#64748b", fontSize: 12, marginTop: 8 },
+    recurringCard: { backgroundColor: "#ffffff", borderColor: "#e2e8f0", borderRadius: 16, borderWidth: 1, marginTop: 20, padding: 20 },
+    recurringRow: { alignItems: "center", borderBottomColor: "#f1f5f9", borderBottomWidth: 1, flexDirection: "row", paddingVertical: 12 },
+    recurringInfo: { flex: 1 },
+    recurringName: { color: "#0f172a", fontSize: 15, fontWeight: "700" },
+    recurringMeta: { color: "#64748b", fontSize: 12, marginTop: 4 },
+    recurringAmount: { fontSize: 15, fontWeight: "700" },
+    emptyText: { color: "#64748b", paddingVertical: 12 },
+    linkText: { color: "#1d4ed8", fontWeight: "700", marginTop: 8 },
+    recurringActions: { flexDirection: "row", gap: 8, marginTop: 16 },
+    secondaryButton: { alignItems: "center", borderColor: "#2563eb", borderRadius: 8, borderWidth: 1, flex: 1, padding: 10 },
+    secondaryButtonText: { color: "#2563eb", fontWeight: "700" },
+    primarySmallButton: { alignItems: "center", backgroundColor: "#2563eb", borderRadius: 8, flex: 1, padding: 10 },
+    primarySmallButtonText: { color: "#fff", fontSize: 12, fontWeight: "700", textAlign: "center" },
     message: { color: "#b91c1c", marginTop: 16 },
     logoutButton: { alignItems: "center", borderColor: "#b91c1c", borderRadius: 8, borderWidth: 1, marginTop: 32, padding: 14 },
     logoutButtonText: { color: "#b91c1c", fontWeight: "bold" },

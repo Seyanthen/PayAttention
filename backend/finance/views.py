@@ -9,9 +9,9 @@ from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from .models import Account, Budget, Category, Transaction
+from .models import Account, Budget, Category, RecurringTransaction, Transaction
 from .permissions import IsOwner
-from .serializers import AccountSerializer, BudgetSerializer, CategorySerializer, TransactionSerializer, UserSerializer
+from .serializers import AccountSerializer, BudgetSerializer, CategorySerializer, RecurringTransactionSerializer, TransactionSerializer, UserSerializer
 from .services import account_balance_minor, budget_spent_minor, budget_spent_minor_for_period, financial_summary
 
 
@@ -138,6 +138,17 @@ class BudgetViewSet(OwnedModelViewSet):
         data["spent_minor"] = budget_spent_minor(budget)
         data["remaining_minor"] = budget.amount_minor - data["spent_minor"]
         return Response(data)
+
+
+class RecurringTransactionViewSet(OwnedModelViewSet):
+    queryset = RecurringTransaction.objects.all()
+    serializer_class = RecurringTransactionSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.request.query_params.get("active") == "true":
+            queryset = queryset.filter(is_active=True)
+        return queryset.order_by("next_occurrence", "name", "id")
 
 
 def _month_bounds(month: date) -> tuple[date, date]:

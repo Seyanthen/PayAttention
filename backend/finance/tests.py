@@ -4,8 +4,8 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
-from .models import Account, Budget, Category, Transaction
-from .services import account_balance_minor, expenses_minor, financial_summary, income_minor, monthly_expenses_minor, monthly_income_minor, monthly_net_cash_flow_minor, user_total_assets_minor, user_total_balance_minor
+from .models import Account, Budget, Category, RecurringTransaction, Transaction
+from .services import account_balance_minor, expenses_minor, financial_summary, income_minor, monthly_expenses_minor, monthly_income_minor, monthly_net_cash_flow_minor, next_recurring_date, user_total_assets_minor, user_total_balance_minor
 
 
 class FinanceApiTests(APITestCase):
@@ -358,4 +358,38 @@ class FinanceApiTests(APITestCase):
 
         response = self.client.get(reverse("budgets-for-month", args=["not-a-month"]))
         self.assertEqual(response.status_code, 400)
+
+    def test_recurring_transactions_are_scoped_and_ordered(self):
+        later = RecurringTransaction.objects.create(owner=self.user, name="Later", amount_minor=2000, transaction_type="expense", frequency="monthly", next_occurrence=date(2026, 10, 14))
+        first = RecurringTransaction.objects.create(owner=self.user, name="First", amount_minor=1000, transaction_type="income", frequency="biweekly", next_occurrence=date(2026, 10, 2))
+        foreign = RecurringTransaction.objects.create(owner=self.other_user, name="Private", amount_minor=500, transaction_type="expense", frequency="weekly", next_occurrence=date(2026, 10, 1))
+        response = self.client.get(reverse("recurring-transaction-list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([row["id"] for row in response.data], [first.id, later.id])
+        self.assertEqual(self.client.get(reverse("recurring-transaction-detail", args=[foreign.id])).status_code, 404)
+
+    def test_recurring_transaction_crud_and_validation(self):
+        response = self.client.post(reverse("recurring-transaction-list"), {
+            "name": " Rent ", "amount_minor": 95000, "transaction_type": "expense",
+            "frequency": "monthly", "next_occurrence": "2026-10-01", "currency": "usd",
+        }, format="json")
+        self.assertEqual(response.status_code, 201)
+        recurring_id = response.data["id"]
+        self.assertEqual(response.data["name"], "Rent")
+        self.assertEqual(response.data["currency"], "USD")
+        response = self.client.patch(reverse("recurring-transaction-detail", args=[recurring_id]), {"is_active": False}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["is_active"])
+        self.assertEqual(self.client.delete(reverse("recurring-transaction-detail", args=[recurring_id])).status_code, 204)
+        invalid = self.client.post(reverse("recurring-transaction-list"), {
+            "name": "", "amount_minor": 0, "transaction_type": "expense",
+            "frequency": "daily", "next_occurrence": "2026-02-30",
+        }, format="json")
+        self.assertEqual(invalid.status_code, 400)
+
+    def test_recurring_date_advancement_handles_calendar_edges(self):
+        self.assertEqual(next_recurring_date(date(2026, 1, 31), "monthly"), date(2026, 2, 28))
+        self.assertEqual(next_recurring_date(date(2028, 1, 31), "monthly"), date(2028, 2, 29))
+        self.assertEqual(next_recurring_date(date(2026, 10, 1), "weekly"), date(2026, 10, 8))
+        self.assertEqual(next_recurring_date(date(2026, 10, 2), "biweekly"), date(2026, 10, 16))
 

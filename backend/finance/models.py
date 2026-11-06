@@ -96,4 +96,28 @@ class GoalContribution(TimeStampedModel):
         related_name="contributions")
     amount_minor = models.BigIntegerField(validators=[MinValueValidator(1)])
     contribution_date = models.DateField()
-   
+
+
+class RecurringTransaction(TimeStampedModel):
+    class TransactionType(models.TextChoices):
+        INCOME = "income", "Income"
+        EXPENSE = "expense", "Expense"
+
+    class Frequency(models.TextChoices):
+        WEEKLY = "weekly", "Weekly"
+        BIWEEKLY = "biweekly", "Every 2 weeks"
+        MONTHLY = "monthly", "Monthly"
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="recurring_transactions")
+    name = models.CharField(max_length=160)
+    amount_minor = models.BigIntegerField(validators=[MinValueValidator(1)])
+    transaction_type = models.CharField(max_length=10, choices=TransactionType.choices)
+    frequency = models.CharField(max_length=10, choices=Frequency.choices)
+    next_occurrence = models.DateField()
+    is_active = models.BooleanField(default=True)
+    currency = models.CharField(max_length=3, default="USD")
+
+    class Meta:
+        indexes = [models.Index(fields=["owner", "is_active", "next_occurrence"], name="finance_rec_owner_i_8fb2d8_idx")]
+        ordering = ["next_occurrence", "name", "id"]
+

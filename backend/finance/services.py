@@ -1,9 +1,26 @@
 from calendar import monthrange
-from datetime import date
+from datetime import date, timedelta
 
 from django.db.models import Q, Sum
 
-from .models import Account, Budget, Transaction
+from .models import Account, Budget, RecurringTransaction, Transaction
+
+
+def next_recurring_date(current: date, frequency: str) -> date:
+    """Return the next UTC calendar date for a recurring schedule.
+
+    Monthly schedules preserve the day when possible and clamp to the last
+    day of the next month (for example Jan 31 -> Feb 28/29).
+    """
+    if frequency == RecurringTransaction.Frequency.WEEKLY:
+        return current + timedelta(days=7)
+    if frequency == RecurringTransaction.Frequency.BIWEEKLY:
+        return current + timedelta(days=14)
+    if frequency == RecurringTransaction.Frequency.MONTHLY:
+        year = current.year + (1 if current.month == 12 else 0)
+        month = 1 if current.month == 12 else current.month + 1
+        return date(year, month, min(current.day, monthrange(year, month)[1]))
+    raise ValueError("Unsupported recurring transaction frequency")
 
 
 def transactions_by_account(user, account_id: int, start_date: date | None = None, end_date: date | None = None):

@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import Account, Budget, Category, Transaction
+from .models import Account, Budget, Category, RecurringTransaction, Transaction
 
 User = get_user_model()
 
@@ -118,4 +118,23 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ["id", "username", "email"]
         read_only_fields = fields
+
+
+class RecurringTransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RecurringTransaction
+        fields = ["id", "name", "amount_minor", "transaction_type", "frequency", "next_occurrence", "is_active", "currency", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Name cannot be empty.")
+        return value
+
+    def validate_currency(self, value):
+        value = value.strip().upper()
+        if len(value) != 3 or not value.isalpha():
+            raise serializers.ValidationError("Currency must be a three-letter code, such as USD.")
+        return value
 

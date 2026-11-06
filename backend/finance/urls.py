@@ -5,6 +5,7 @@ from .views import (
     AccountViewSet,
     BudgetViewSet,
     CategoryViewSet,
+    RecurringTransactionViewSet,
     TransactionViewSet,
     budgets_for_month,
     current_budgets,
@@ -19,6 +20,7 @@ router.register("accounts", AccountViewSet, basename="account")
 router.register("categories", CategoryViewSet, basename="category")
 router.register("transactions", TransactionViewSet, basename="transaction")
 router.register("budgets", BudgetViewSet, basename="budget")
+router.register("recurring-transactions", RecurringTransactionViewSet, basename="recurring-transaction")
 
 urlpatterns = [
     path("health/", health, name="health"),
