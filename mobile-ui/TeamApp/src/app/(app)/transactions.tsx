@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { SymbolView } from 'expo-symbols';
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -6,12 +7,14 @@ import {
   Platform,
   Pressable,
   SafeAreaView,
+  Share,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { authenticatedGet, getApiErrorMessage } from '@/services/api';
 import { validateTransaction, validateTransactionFilters, type ValidationErrors } from '@/services/validation';
@@ -69,6 +72,7 @@ export default function TransactionsScreen() {
   const [loadError, setLoadError] = useState('');
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isAddVisible, setIsAddVisible] = useState(false);
+  const [isImportExportVisible, setIsImportExportVisible] = useState(false);
   const [isHistoryVisible, setIsHistoryVisible] = useState(false);
   const [merchant, setMerchant] = useState('');
   const [amount, setAmount] = useState('');
@@ -178,6 +182,7 @@ export default function TransactionsScreen() {
   const closeModal = () => {
     Keyboard.dismiss();
     setIsAddVisible(false);
+    setIsImportExportVisible(false);
     setSelectedTransaction(null);
     setIsHistoryVisible(false);
   };
@@ -200,12 +205,53 @@ export default function TransactionsScreen() {
     closeModal();
   };
 
+  const importTransactions = () => {
+    setIsImportExportVisible(false);
+    Alert.alert('Import transactions', 'Transaction import is not available yet.');
+  };
+
+  const exportTransactions = async () => {
+    setIsImportExportVisible(false);
+    if (transactions.length === 0) {
+      Alert.alert('Export transactions', 'There are no transactions to export.');
+      return;
+    }
+
+    const escapeCsv = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
+    const csv = [
+      ['Date', 'Merchant', 'Amount (minor units)', 'Category', 'Account', 'Type', 'Notes'].join(','),
+      ...transactions.map((transaction) => [
+        transaction.date,
+        transaction.merchant,
+        transaction.amount,
+        transaction.category,
+        transaction.account,
+        transaction.kind,
+        transaction.notes,
+      ].map(escapeCsv).join(',')),
+    ].join('\n');
+
+    try {
+      await Share.share({ message: csv, title: 'Transactions.csv' });
+    } catch {
+      Alert.alert('Export transactions', 'Unable to share the transaction export.');
+    }
+  };
+
+  const openImportExport = () => setIsImportExportVisible(true);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <View><Text style={styles.title}>Transactions</Text><Text style={styles.subtitle}>Track your income and spending</Text></View>
-          <Pressable accessibilityRole="button" style={styles.addButton} onPress={openAdd}><Text style={styles.addButtonText}>+ Add</Text></Pressable>
+          <View>
+            <Text style={styles.title}>Transactions</Text>
+            {/* <Text style={styles.subtitle}>Track your income and spending</Text> */}
+          </View>
+          <View style={styles.headerActions}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Add transaction" style={styles.addButton} onPress={openAdd}><Text style={styles.addButtonText}>+ Add</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Import or export transactions" style={styles.secondaryHeaderButton} onPress={openImportExport}><SymbolView name="doc.text" size={20} tintColor="#2563eb" /></Pressable>
+          </View>
         </View>
 
         <View style={styles.filterCard}>
@@ -313,6 +359,16 @@ export default function TransactionsScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+      <Modal visible={isImportExportVisible} animationType="fade" transparent onRequestClose={closeModal}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.choiceModalCard}>
+            <View style={styles.modalHeader}><Text style={styles.modalTitle}>Transactions</Text><Pressable accessibilityRole="button" onPress={closeModal}><Text style={styles.closeText}>Close</Text></Pressable></View>
+            <Text style={styles.choiceModalText}>What would you like to do?</Text>
+            <Pressable accessibilityRole="button" style={styles.primaryButton} onPress={importTransactions}><Text style={styles.primaryButtonText}>Import transactions</Text></Pressable>
+            <Pressable accessibilityRole="button" style={styles.secondaryChoiceButton} onPress={() => void exportTransactions()}><Text style={styles.secondaryHeaderButtonText}>Export transactions</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -325,7 +381,7 @@ function formatCurrency(value: number) { return `$${(Math.abs(value) / 100).toFi
 function formatToday() { return new Date().toISOString().slice(0, 10); }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f8fafc' }, container: { padding: 24, paddingBottom: 48 }, header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }, title: { fontSize: 32, fontWeight: 'bold', color: '#0f172a' }, subtitle: { marginTop: 4, color: '#64748b' }, addButton: { backgroundColor: '#2563eb', paddingHorizontal: 16, paddingVertical: 11, borderRadius: 8 }, addButtonText: { color: '#fff', fontWeight: 'bold' },
+  safeArea: { flex: 1, backgroundColor: '#f8fafc' }, container: { padding: 24, paddingBottom: 48 }, header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }, title: { fontSize: 32, fontWeight: 'bold', color: '#0f172a' }, subtitle: { marginTop: 4, color: '#64748b' }, headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 12 }, secondaryHeaderButton: { borderWidth: 1, borderColor: '#2563eb', paddingHorizontal: 11, paddingVertical: 10, borderRadius: 8, alignItems: 'center' }, secondaryHeaderButtonText: { color: '#2563eb', fontWeight: '700' }, addButton: { backgroundColor: '#2563eb', paddingHorizontal: 12, paddingVertical: 11, borderRadius: 8, alignItems: 'center' }, addButtonText: { color: '#fff', fontWeight: 'bold' },
   summaryCard: { backgroundColor: '#eff6ff', borderRadius: 12, padding: 18, flexDirection: 'row', alignItems: 'center', marginBottom: 28 }, summaryLabel: { color: '#64748b', fontSize: 13, marginBottom: 5 }, summaryValue: { color: '#15803d', fontSize: 21, fontWeight: 'bold' }, expenseText: { color: '#dc2626' }, summaryDivider: { width: 1, height: 42, backgroundColor: '#bfdbfe', marginHorizontal: 28 }, sectionTitle: { color: '#0f172a', fontSize: 20, fontWeight: 'bold', marginBottom: 12 }, transactionCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center' }, pressed: { opacity: 0.7 }, transactionIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center', marginRight: 12 }, transactionIconText: { color: '#475569', fontSize: 22, fontWeight: '600' }, transactionInfo: { flex: 1 }, merchant: { color: '#0f172a', fontSize: 16, fontWeight: '600' }, transactionMeta: { color: '#64748b', fontSize: 13, marginTop: 5 }, transactionAmount: { color: '#dc2626', fontSize: 16, fontWeight: 'bold', marginLeft: 10 }, incomeText: { color: '#15803d' }, emptyState: { color: '#64748b', textAlign: 'center', paddingVertical: 32 }, historyButton: { alignItems: 'center', paddingVertical: 14, marginTop: 4 }, historyButtonText: { color: '#2563eb', fontWeight: '700' },
   modalBackdrop: { flex: 1, justifyContent: 'center', paddingHorizontal: 16, backgroundColor: 'rgba(15, 23, 42, 0.45)' }, keyboardContainer: { width: '100%' }, modalCard: { backgroundColor: '#fff', borderRadius: 20, padding: 24, maxHeight: '90%', minHeight: 373 }, modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }, modalTitle: { fontSize: 24, fontWeight: 'bold', color: '#0f172a' }, closeText: { color: '#2563eb', fontWeight: '600' }, detailsScrollView: { flexGrow: 0 }, detailsContent: { paddingBottom: 12 }, historyScrollView: { flexGrow: 0 }, historyContent: { paddingBottom: 12 }, historyTableHeader: { flexDirection: 'row', alignItems: 'center', paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#cbd5e1' }, historyHeaderText: { color: '#64748b', fontSize: 12, fontWeight: '700', textTransform: 'uppercase' }, historyTableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }, historyDateColumn: { width: 82 }, historyTitleColumn: { flex: 1, marginRight: 16 }, historyDate: { color: '#64748b', fontSize: 12 }, historyTitle: { color: '#0f172a', fontWeight: '600', flex: 1, marginRight: 16 }, historyAmountColumn: { width: 78, textAlign: 'right' }, historyAmount: { color: '#dc2626', fontWeight: '700' }, detailHero: { backgroundColor: '#f8fafc', borderRadius: 12, padding: 18, marginBottom: 12 }, detailMerchant: { color: '#0f172a', fontSize: 20, fontWeight: 'bold', marginBottom: 8 }, detailAmount: { color: '#dc2626', fontSize: 28, fontWeight: 'bold' }, detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }, detailLabel: { color: '#64748b' }, detailValue: { color: '#0f172a', fontWeight: '600', maxWidth: '60%', textAlign: 'right' },
   inputLabel: { color: '#334155', fontWeight: '600', marginBottom: 6, marginTop: 12 }, input: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, padding: 12, color: '#0f172a', backgroundColor: '#fff' }, notesInput: { minHeight: 76, textAlignVertical: 'top' }, optionRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' }, categoryRow: { gap: 8, paddingVertical: 2 }, optionButton: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingVertical: 9, paddingHorizontal: 12 }, categoryButton: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 16, paddingVertical: 8, paddingHorizontal: 12 }, accountButton: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingVertical: 9, paddingHorizontal: 12 }, selectedOption: { backgroundColor: '#dbeafe', borderColor: '#2563eb' }, optionText: { color: '#475569' }, selectedOptionText: { color: '#1d4ed8', fontWeight: '600' }, primaryButton: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 24, marginBottom: 12 }, primaryButtonText: { color: '#fff', fontWeight: 'bold' },
@@ -343,6 +399,9 @@ const styles = StyleSheet.create({
   errorText: { color: '#b91c1c', textAlign: 'center' },
   retryButton: { borderWidth: 1, borderColor: '#b91c1c', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 9, marginTop: 10 },
   retryButtonText: { color: '#b91c1c', fontWeight: '700' },
+  choiceModalCard: { backgroundColor: '#fff', borderRadius: 20, padding: 24 },
+  choiceModalText: { color: '#475569', fontSize: 16, marginBottom: 4 },
+  secondaryChoiceButton: { borderWidth: 1, borderColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 4 },
   buttonDisabled: { opacity: 0.65 },
 });
 // view transactions
