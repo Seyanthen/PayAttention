@@ -32,18 +32,5 @@ class Migration(migrations.Migration):
                 'abstract': False,
             },
         ),
-        migrations.CreateModel(
-            name='GoalContribution',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('amount_minor', models.BigIntegerField(validators=[django.core.validators.MinValueValidator(1)])),
-                ('contribution_date', models.DateField()),
-                ('goal', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='contributions', to='finance.savingsgoal')),
-            ],
-            options={
-                'abstract': False,
-            },
-        ),
+        
     ]
