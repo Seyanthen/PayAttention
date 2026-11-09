@@ -21,9 +21,12 @@ class Command(BaseCommand):
                 "last_name": "User",
             },
         )
-        if created:
-            user.set_password("demo-password")
-            user.save(update_fields=["password"])
+        # Keep the documented demo credentials usable even when the user was
+        # created by an earlier run or already exists in a shared dev database.
+        # ``set_password`` is required so Django stores a valid password hash.
+        user.set_password("demo-password")
+        user.is_active = True
+        user.save(update_fields=["password", "is_active"])
 
         checking, _ = Account.objects.get_or_create(
             owner=user,
