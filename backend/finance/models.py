@@ -85,17 +85,23 @@ class Budget(TimeStampedModel):
 class Goal(TimeStampedModel):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="goals")
     name = models.CharField(max_length=120)
-    target_amount_minor = models.BigIntegerField(validators=[MinValueValidator(1)])
-    target_date = models.DateField()
+    target_amount_minor = models.BigIntegerField(db_column="target_amount", validators=[MinValueValidator(1)])
+    legacy_current_amount = models.BigIntegerField(db_column="current_amount", default=0, editable=False)
+    target_date = models.DateField(null=True, blank=True)
     currency = models.CharField(max_length=3, default="USD")
     is_completed = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = "finance_savingsgoal"
 
 
 class GoalContribution(TimeStampedModel):
     goal = models.ForeignKey(Goal, on_delete=models.CASCADE, related_name="contributions")
     amount_minor = models.BigIntegerField(validators=[MinValueValidator(1)])
-<<<<<<< Updated upstream
-    contribution_date = models.DateField()
+    contributed_on = models.DateField(db_column="contribution_date")
+
+    class Meta:
+        db_table = "finance_goalcontribution"
 
 
 class RecurringTransaction(TimeStampedModel):
@@ -121,6 +127,3 @@ class RecurringTransaction(TimeStampedModel):
         indexes = [models.Index(fields=["owner", "is_active", "next_occurrence"], name="finance_rec_owner_i_8fb2d8_idx")]
         ordering = ["next_occurrence", "name", "id"]
 
-=======
-    contributed_on = models.DateField()
->>>>>>> Stashed changes

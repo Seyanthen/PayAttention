@@ -4,13 +4,8 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
-<<<<<<< Updated upstream
-from .models import Account, Budget, Category, RecurringTransaction, Transaction
+from .models import Account, Budget, Category, Goal, GoalContribution, RecurringTransaction, Transaction
 from .services import account_balance_minor, expenses_minor, financial_summary, income_minor, monthly_expenses_minor, monthly_income_minor, monthly_net_cash_flow_minor, next_recurring_date, user_total_assets_minor, user_total_balance_minor
-=======
-from .models import Account, Budget, Category, Goal, GoalContribution, Transaction
-from .services import account_balance_minor, expenses_minor, financial_summary, income_minor, monthly_expenses_minor, monthly_income_minor, monthly_net_cash_flow_minor, user_total_assets_minor, user_total_balance_minor
->>>>>>> Stashed changes
 
 
 class FinanceApiTests(APITestCase):
@@ -364,7 +359,6 @@ class FinanceApiTests(APITestCase):
         response = self.client.get(reverse("budgets-for-month", args=["not-a-month"]))
         self.assertEqual(response.status_code, 400)
 
-<<<<<<< Updated upstream
     def test_recurring_transactions_are_scoped_and_ordered(self):
         later = RecurringTransaction.objects.create(owner=self.user, name="Later", amount_minor=2000, transaction_type="expense", frequency="monthly", next_occurrence=date(2026, 10, 14))
         first = RecurringTransaction.objects.create(owner=self.user, name="First", amount_minor=1000, transaction_type="income", frequency="biweekly", next_occurrence=date(2026, 10, 2))
@@ -398,7 +392,6 @@ class FinanceApiTests(APITestCase):
         self.assertEqual(next_recurring_date(date(2028, 1, 31), "monthly"), date(2028, 2, 29))
         self.assertEqual(next_recurring_date(date(2026, 10, 1), "weekly"), date(2026, 10, 8))
         self.assertEqual(next_recurring_date(date(2026, 10, 2), "biweekly"), date(2026, 10, 16))
-=======
     def test_monthly_report_is_inclusive_and_excludes_transfers(self):
         Transaction.objects.create(owner=self.user, account=self.account, category=self.income_category, transaction_type="income", amount_minor=10000, occurred_on=date(2026, 1, 1))
         Transaction.objects.create(owner=self.user, account=self.account, category=self.expense_category, transaction_type="expense", amount_minor=2500, occurred_on=date(2026, 1, 31))
@@ -445,5 +438,4 @@ class FinanceApiTests(APITestCase):
         self.assertEqual(response.data[0]["remaining_amount_minor"], 6500)
         self.assertEqual(response.data[0]["progress_percent"], 35.0)
         self.assertEqual(self.client.get(reverse("goal-detail", args=[other_goal.id])).status_code, 404)
->>>>>>> Stashed changes
 

@@ -1,11 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-<<<<<<< Updated upstream
-from .models import Account, Budget, Category, RecurringTransaction, Transaction
-=======
-from .models import Account, Budget, Category, Goal, GoalContribution, Transaction
->>>>>>> Stashed changes
+from .models import Account, Budget, Category, Goal, GoalContribution, RecurringTransaction, Transaction
 
 User = get_user_model()
 

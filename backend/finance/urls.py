@@ -26,11 +26,8 @@ router.register("accounts", AccountViewSet, basename="account")
 router.register("categories", CategoryViewSet, basename="category")
 router.register("transactions", TransactionViewSet, basename="transaction")
 router.register("budgets", BudgetViewSet, basename="budget")
-<<<<<<< Updated upstream
 router.register("recurring-transactions", RecurringTransactionViewSet, basename="recurring-transaction")
-=======
 router.register("goals", GoalViewSet, basename="goal")
->>>>>>> Stashed changes
 
 urlpatterns = [
     path("health/", health, name="health"),

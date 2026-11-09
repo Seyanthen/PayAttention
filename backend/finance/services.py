@@ -1,15 +1,11 @@
 from calendar import monthrange
 from datetime import date, timedelta
-<<<<<<< Updated upstream
-=======
 from decimal import Decimal, ROUND_HALF_UP
->>>>>>> Stashed changes
 
 from django.db.models import Q, Sum, Value, IntegerField
 from django.db.models.functions import Coalesce, TruncMonth
 
-<<<<<<< Updated upstream
-from .models import Account, Budget, RecurringTransaction, Transaction
+from .models import Account, Budget, Goal, RecurringTransaction, Transaction
 
 
 def next_recurring_date(current: date, frequency: str) -> date:
@@ -27,9 +23,6 @@ def next_recurring_date(current: date, frequency: str) -> date:
         month = 1 if current.month == 12 else current.month + 1
         return date(year, month, min(current.day, monthrange(year, month)[1]))
     raise ValueError("Unsupported recurring transaction frequency")
-=======
-from .models import Account, Budget, Goal, Transaction
->>>>>>> Stashed changes
 
 
 def transactions_by_account(user, account_id: int, start_date: date | None = None, end_date: date | None = None):

@@ -12,17 +12,10 @@ from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-<<<<<<< Updated upstream
-from .models import Account, Budget, Category, RecurringTransaction, Transaction
+from .models import Account, Budget, Category, Goal, RecurringTransaction, Transaction
 from .permissions import IsOwner
-from .serializers import AccountSerializer, BudgetSerializer, CategorySerializer, RecurringTransactionSerializer, TransactionSerializer, UserSerializer
-from .services import account_balance_minor, budget_spent_minor, budget_spent_minor_for_period, financial_summary
-=======
-from .models import Account, Budget, Category, Goal, Transaction
-from .permissions import IsOwner
-from .serializers import AccountSerializer, BudgetSerializer, CategorySerializer, GoalSerializer, TransactionSerializer, UserSerializer
+from .serializers import AccountSerializer, BudgetSerializer, CategorySerializer, GoalSerializer, RecurringTransactionSerializer, TransactionSerializer, UserSerializer
 from .services import account_balance_minor, budget_performance_report, budget_spent_minor, budget_spent_minor_for_period, category_report, cash_flow_report, financial_summary, goal_progress, monthly_report
->>>>>>> Stashed changes
 
 
 class OwnedModelViewSet(viewsets.ModelViewSet):
@@ -150,7 +143,6 @@ class BudgetViewSet(OwnedModelViewSet):
         return Response(data)
 
 
-<<<<<<< Updated upstream
 class RecurringTransactionViewSet(OwnedModelViewSet):
     queryset = RecurringTransaction.objects.all()
     serializer_class = RecurringTransactionSerializer
@@ -160,7 +152,6 @@ class RecurringTransactionViewSet(OwnedModelViewSet):
         if self.request.query_params.get("active") == "true":
             queryset = queryset.filter(is_active=True)
         return queryset.order_by("next_occurrence", "name", "id")
-=======
 class GoalViewSet(OwnedModelViewSet):
     queryset = Goal.objects.all()
     serializer_class = GoalSerializer
@@ -192,7 +183,6 @@ class GoalViewSet(OwnedModelViewSet):
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
         return Response(self._response_data(self.get_queryset().get(pk=instance.pk)))
->>>>>>> Stashed changes
 
 
 def _month_bounds(month: date) -> tuple[date, date]:
@@ -268,7 +258,6 @@ def current_month_summary(request):
     return Response(financial_summary(request.user, period_start, period_end))
 
 
-<<<<<<< Updated upstream
 @api_view(["GET"])
 def export_transactions(request):
     start_value = request.query_params.get("start_date")
@@ -334,7 +323,6 @@ def export_transactions(request):
         ])
 
     return response
-=======
 def _report_dates(request):
     try:
         start_value = request.query_params["start"]
@@ -373,4 +361,3 @@ def budget_performance_report_view(request):
     start, end, error = _report_dates(request)
     return error or Response(budget_performance_report(request.user, start, end))
 
->>>>>>> Stashed changes
