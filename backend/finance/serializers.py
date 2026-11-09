@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import Account, Budget, Category, RecurringTransaction, Transaction
+from .models import Account, Budget, Category, Goal, GoalContribution, RecurringTransaction, Transaction
 
 User = get_user_model()
 
@@ -112,6 +112,39 @@ class BudgetSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Currency must be a three-letter code, such as USD.")
         return value
 
+
+class GoalContributionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GoalContribution
+        fields = ["id", "goal", "amount_minor", "contributed_on", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class GoalSerializer(serializers.ModelSerializer):
+    current_amount_minor = serializers.IntegerField(read_only=True)
+    remaining_amount_minor = serializers.IntegerField(read_only=True)
+    progress_percent = serializers.DecimalField(max_digits=7, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = Goal
+        fields = [
+            "id", "name", "target_amount_minor", "current_amount_minor",
+            "remaining_amount_minor", "progress_percent", "target_date",
+            "currency", "is_completed", "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "current_amount_minor", "remaining_amount_minor", "progress_percent", "created_at", "updated_at"]
+
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Goal name cannot be empty.")
+        return value
+
+    def validate_currency(self, value):
+        value = value.strip().upper()
+        if len(value) != 3 or not value.isalpha():
+            raise serializers.ValidationError("Currency must be a three-letter code, such as USD.")
+        return value
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:

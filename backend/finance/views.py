@@ -6,15 +6,16 @@ from django.http import HttpResponse, JsonResponse
 
 from django.http import JsonResponse
 from django.utils import timezone
-from django.db.models import Q
+from django.db.models import Q, IntegerField, Sum, Value
+from django.db.models.functions import Coalesce
 from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from .models import Account, Budget, Category, RecurringTransaction, Transaction
+from .models import Account, Budget, Category, Goal, RecurringTransaction, Transaction
 from .permissions import IsOwner
-from .serializers import AccountSerializer, BudgetSerializer, CategorySerializer, RecurringTransactionSerializer, TransactionSerializer, UserSerializer
-from .services import account_balance_minor, budget_spent_minor, budget_spent_minor_for_period, financial_summary
+from .serializers import AccountSerializer, BudgetSerializer, CategorySerializer, GoalSerializer, RecurringTransactionSerializer, TransactionSerializer, UserSerializer
+from .services import account_balance_minor, budget_performance_report, budget_spent_minor, budget_spent_minor_for_period, category_report, cash_flow_report, financial_summary, goal_progress, monthly_report
 
 
 class OwnedModelViewSet(viewsets.ModelViewSet):
@@ -151,6 +152,37 @@ class RecurringTransactionViewSet(OwnedModelViewSet):
         if self.request.query_params.get("active") == "true":
             queryset = queryset.filter(is_active=True)
         return queryset.order_by("next_occurrence", "name", "id")
+class GoalViewSet(OwnedModelViewSet):
+    queryset = Goal.objects.all()
+    serializer_class = GoalSerializer
+
+    def get_queryset(self):
+        return super().get_queryset().annotate(current_amount_minor=Coalesce(Sum("contributions__amount_minor"), Value(0), output_field=IntegerField()))
+
+    def _response_data(self, goal):
+        data = self.get_serializer(goal).data
+        data.update(goal_progress(goal))
+        return data
+
+    def list(self, request, *args, **kwargs):
+        return Response([self._response_data(goal) for goal in self.filter_queryset(self.get_queryset())])
+
+    def retrieve(self, request, *args, **kwargs):
+        return Response(self._response_data(self.get_object()))
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        return Response(self._response_data(self.get_queryset().get(pk=serializer.instance.pk)), status=status.HTTP_201_CREATED, headers=self.get_success_headers(serializer.data))
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(self._response_data(self.get_queryset().get(pk=instance.pk)))
 
 
 def _month_bounds(month: date) -> tuple[date, date]:
@@ -291,3 +323,41 @@ def export_transactions(request):
         ])
 
     return response
+def _report_dates(request):
+    try:
+        start_value = request.query_params["start"]
+        end_value = request.query_params["end"]
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", start_value) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", end_value):
+            raise ValueError
+        period_start = date.fromisoformat(start_value)
+        period_end = date.fromisoformat(end_value)
+    except (KeyError, TypeError, ValueError):
+        return None, None, Response({"detail": "start and end must be ISO-8601 dates (YYYY-MM-DD)."}, status=status.HTTP_400_BAD_REQUEST)
+    if period_end < period_start:
+        return None, None, Response({"detail": "end must be on or after start."}, status=status.HTTP_400_BAD_REQUEST)
+    return period_start, period_end, None
+
+
+@api_view(["GET"])
+def monthly_report_view(request):
+    start, end, error = _report_dates(request)
+    return error or Response(monthly_report(request.user, start, end))
+
+
+@api_view(["GET"])
+def category_report_view(request):
+    start, end, error = _report_dates(request)
+    return error or Response(category_report(request.user, start, end))
+
+
+@api_view(["GET"])
+def cash_flow_report_view(request):
+    start, end, error = _report_dates(request)
+    return error or Response(cash_flow_report(request.user, start, end))
+
+
+@api_view(["GET"])
+def budget_performance_report_view(request):
+    start, end, error = _report_dates(request)
+    return error or Response(budget_performance_report(request.user, start, end))
+

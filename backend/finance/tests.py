@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
-from .models import Account, Budget, Category, RecurringTransaction, Transaction
+from .models import Account, Budget, Category, Goal, GoalContribution, RecurringTransaction, Transaction
 from .services import account_balance_minor, expenses_minor, financial_summary, income_minor, monthly_expenses_minor, monthly_income_minor, monthly_net_cash_flow_minor, next_recurring_date, user_total_assets_minor, user_total_balance_minor
 
 
@@ -392,4 +392,50 @@ class FinanceApiTests(APITestCase):
         self.assertEqual(next_recurring_date(date(2028, 1, 31), "monthly"), date(2028, 2, 29))
         self.assertEqual(next_recurring_date(date(2026, 10, 1), "weekly"), date(2026, 10, 8))
         self.assertEqual(next_recurring_date(date(2026, 10, 2), "biweekly"), date(2026, 10, 16))
+    def test_monthly_report_is_inclusive_and_excludes_transfers(self):
+        Transaction.objects.create(owner=self.user, account=self.account, category=self.income_category, transaction_type="income", amount_minor=10000, occurred_on=date(2026, 1, 1))
+        Transaction.objects.create(owner=self.user, account=self.account, category=self.expense_category, transaction_type="expense", amount_minor=2500, occurred_on=date(2026, 1, 31))
+        Transaction.objects.create(owner=self.user, account=self.account, transfer_account=self.other_account, transaction_type="transfer", amount_minor=9000, occurred_on=date(2026, 1, 15))
+        response = self.client.get(reverse("monthly-report"), {"start": "2026-01-01", "end": "2026-01-31"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["months"], [{"month": "2026-01", "income_minor": 10000, "expenses_minor": 2500, "net_cash_flow_minor": 7500}])
+
+    def test_category_report_includes_uncategorized_and_owner_isolation(self):
+        Transaction.objects.create(owner=self.user, account=self.account, category=self.expense_category, transaction_type="expense", amount_minor=3000, occurred_on=date(2026, 2, 1))
+        Transaction.objects.create(owner=self.user, account=self.account, transaction_type="expense", amount_minor=1000, occurred_on=date(2026, 2, 2))
+        Transaction.objects.create(owner=self.other_user, account=self.other_account, transaction_type="expense", amount_minor=9999, occurred_on=date(2026, 2, 2))
+        response = self.client.get(reverse("category-report"), {"start": "2026-02-01", "end": "2026-02-28"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["total_expenses_minor"], 4000)
+        self.assertEqual({row["category_name"] for row in response.data["categories"]}, {"Food", "Uncategorized"})
+
+    def test_cash_flow_report_validates_dates_and_returns_empty_period(self):
+        response = self.client.get(reverse("cash-flow-report"), {"start": "2026-03-01", "end": "2026-03-31"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["net_cash_flow_minor"], 0)
+        response = self.client.get(reverse("cash-flow-report"), {"start": "2026-03-02", "end": "2026-03-01"})
+        self.assertEqual(response.status_code, 400)
+        response = self.client.get(reverse("cash-flow-report"), {"start": "03/01/2026", "end": "2026-03-31"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_budget_performance_uses_date_overlap(self):
+        budget = Budget.objects.create(owner=self.user, category=self.expense_category, name="Food", amount_minor=5000, period_start=date(2026, 1, 1), period_end=date(2026, 1, 31))
+        Transaction.objects.create(owner=self.user, account=self.account, category=self.expense_category, transaction_type="expense", amount_minor=1500, occurred_on=date(2026, 1, 15))
+        Transaction.objects.create(owner=self.user, account=self.account, category=self.expense_category, transaction_type="expense", amount_minor=3000, occurred_on=date(2026, 2, 1))
+        response = self.client.get(reverse("budget-performance-report"), {"start": "2026-01-15", "end": "2026-01-31"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["budgets"][0]["budget_id"], budget.id)
+        self.assertEqual(response.data["budgets"][0]["spent_minor"], 1500)
+
+    def test_goals_are_owner_scoped_and_progress_is_aggregated(self):
+        goal = Goal.objects.create(owner=self.user, name="Emergency fund", target_amount_minor=10000, target_date=date(2027, 6, 1))
+        GoalContribution.objects.create(goal=goal, amount_minor=3500, contributed_on=date(2026, 1, 1))
+        other_goal = Goal.objects.create(owner=self.other_user, name="Private", target_amount_minor=5000, target_date=date(2027, 6, 1))
+        response = self.client.get(reverse("goal-list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["current_amount_minor"], 3500)
+        self.assertEqual(response.data[0]["remaining_amount_minor"], 6500)
+        self.assertEqual(response.data[0]["progress_percent"], 35.0)
+        self.assertEqual(self.client.get(reverse("goal-detail", args=[other_goal.id])).status_code, 404)
 

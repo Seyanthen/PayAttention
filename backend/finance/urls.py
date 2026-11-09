@@ -7,10 +7,15 @@ from .views import (
     CategoryViewSet,
     RecurringTransactionViewSet,
     TransactionViewSet,
+    GoalViewSet,
+    budget_performance_report_view,
     budgets_for_month,
     current_budgets,
     current_month_summary,
+    cash_flow_report_view,
+    category_report_view,
     health,
+    monthly_report_view,
     me,
     summary,
     export_transactions,
@@ -22,12 +27,17 @@ router.register("categories", CategoryViewSet, basename="category")
 router.register("transactions", TransactionViewSet, basename="transaction")
 router.register("budgets", BudgetViewSet, basename="budget")
 router.register("recurring-transactions", RecurringTransactionViewSet, basename="recurring-transaction")
+router.register("goals", GoalViewSet, basename="goal")
 
 urlpatterns = [
     path("health/", health, name="health"),
     path("me/", me, name="me"),
     path("summary/", summary, name="summary"),
     path("summary/current-month/", current_month_summary, name="current-month-summary"),
+    path("reports/monthly/", monthly_report_view, name="monthly-report"),
+    path("reports/categories/", category_report_view, name="category-report"),
+    path("reports/cash-flow/", cash_flow_report_view, name="cash-flow-report"),
+    path("reports/budget-performance/", budget_performance_report_view, name="budget-performance-report"),
     path("budgets/current/", current_budgets, name="current-budgets"),
     # Accept malformed named months so the view can return a useful 400,
     # while excluding numeric IDs used by the router's budget detail route.
