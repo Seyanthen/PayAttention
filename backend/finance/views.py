@@ -1,6 +1,8 @@
 from calendar import monthrange
 from datetime import date
 import re
+import csv
+from django.http import HttpResponse, JsonResponse
 
 from django.http import JsonResponse
 from django.utils import timezone
@@ -223,3 +225,69 @@ def current_month_summary(request):
     period_start, period_end = _month_bounds(timezone.localdate())
     return Response(financial_summary(request.user, period_start, period_end))
 
+
+@api_view(["GET"])
+def export_transactions(request):
+    start_value = request.query_params.get("start_date")
+    end_value = request.query_params.get("end_date")
+
+    if not start_value:
+        return Response(
+            {"detail": "start_date is required."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        period_start = date.fromisoformat(start_value)
+        period_end = date.fromisoformat(
+            end_value or timezone.localdate().isoformat()
+        )
+    except ValueError:
+        return Response(
+            {"detail": "Dates must use YYYY-MM-DD format."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if period_end < period_start:
+        return Response(
+            {"detail": "end_date must be on or after start_date."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    transactions = (
+        Transaction.objects
+        .filter(
+            owner=request.user,
+            occurred_on__gte=period_start,
+            occurred_on__lte=period_end,
+        )
+        .select_related("category")
+        .order_by("occurred_on", "id")
+    )
+
+    response = HttpResponse(
+        content_type="text/csv; charset=utf-8"
+    )
+    response["Content-Disposition"] = (
+        'attachment; filename="transactions.csv"'
+    )
+
+    writer = csv.writer(response)
+    writer.writerow(["Date", "Description", "Amount", "Category"])
+
+    for transaction in transactions:
+        amount = transaction.amount_minor / 100
+
+        if transaction.transaction_type == "expense":
+            amount *= -1
+
+        writer.writerow([
+            transaction.occurred_on.strftime("%m/%d/%y"),
+            transaction.merchant or transaction.note,
+            f"{amount:.2f}",
+            transaction.category.name
+            if transaction.category
+            else "",
+        ])
+
+    return response
