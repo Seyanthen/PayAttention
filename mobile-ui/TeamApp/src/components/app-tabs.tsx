@@ -78,13 +78,13 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="recurring">
+      {/* <NativeTabs.Trigger name="recurring">
         <NativeTabs.Trigger.Label>Recurring</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
           src={require('@/assets/images/tabIcons/explore.png')}
           renderingMode="template"
         />
-      </NativeTabs.Trigger>
+      </NativeTabs.Trigger> */}
 
     </NativeTabs>
   );

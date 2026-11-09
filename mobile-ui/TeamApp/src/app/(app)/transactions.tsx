@@ -150,7 +150,12 @@ export default function TransactionsScreen() {
   }
 
   useEffect(() => {
-    void loadTransactions(false);
+    const timer = setTimeout(() => {
+      void loadTransactions(false);
+    }, 0);
+    return () => clearTimeout(timer);
+    // This is intentionally a one-time initial fetch; later fetches use explicit user actions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const applyFilters = () => {
