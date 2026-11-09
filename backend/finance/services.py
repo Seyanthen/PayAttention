@@ -1,8 +1,14 @@
 from calendar import monthrange
 from datetime import date, timedelta
+<<<<<<< Updated upstream
+=======
+from decimal import Decimal, ROUND_HALF_UP
+>>>>>>> Stashed changes
 
-from django.db.models import Q, Sum
+from django.db.models import Q, Sum, Value, IntegerField
+from django.db.models.functions import Coalesce, TruncMonth
 
+<<<<<<< Updated upstream
 from .models import Account, Budget, RecurringTransaction, Transaction
 
 
@@ -21,6 +27,9 @@ def next_recurring_date(current: date, frequency: str) -> date:
         month = 1 if current.month == 12 else current.month + 1
         return date(year, month, min(current.day, monthrange(year, month)[1]))
     raise ValueError("Unsupported recurring transaction frequency")
+=======
+from .models import Account, Budget, Goal, Transaction
+>>>>>>> Stashed changes
 
 
 def transactions_by_account(user, account_id: int, start_date: date | None = None, end_date: date | None = None):
@@ -235,4 +244,79 @@ def over_budget_categories(user):
             })
 
     return results
+
+
+def _report_transactions(user, period_start, period_end):
+    return Transaction.objects.filter(
+        owner=user,
+        occurred_on__gte=period_start,
+        occurred_on__lte=period_end,
+    ).exclude(transaction_type=Transaction.TransactionType.TRANSFER)
+
+
+def monthly_report(user, period_start: date, period_end: date) -> dict:
+    rows = _report_transactions(user, period_start, period_end).annotate(
+        month=TruncMonth("occurred_on")
+    ).values("month").annotate(
+        income_minor=Coalesce(Sum("amount_minor", filter=Q(transaction_type=Transaction.TransactionType.INCOME)), Value(0), output_field=IntegerField()),
+        expenses_minor=Coalesce(Sum("amount_minor", filter=Q(transaction_type=Transaction.TransactionType.EXPENSE)), Value(0), output_field=IntegerField()),
+    ).order_by("month")
+    by_month = {
+        (row["month"].date() if hasattr(row["month"], "date") else row["month"]): row
+        for row in rows
+    }
+    months = []
+    current = period_start.replace(day=1)
+    last = period_end.replace(day=1)
+    while current <= last:
+        row = by_month.get(current, {})
+        income = int(row.get("income_minor", 0))
+        expenses = int(row.get("expenses_minor", 0))
+        months.append({"month": current.strftime("%Y-%m"), "income_minor": income, "expenses_minor": expenses, "net_cash_flow_minor": income - expenses})
+        current = current.replace(day=28) + timedelta(days=4)
+        current = current.replace(day=1)
+    return {"period_start": period_start, "period_end": period_end, "months": months}
+
+
+def category_report(user, period_start: date, period_end: date) -> dict:
+    rows = Transaction.objects.filter(owner=user, occurred_on__gte=period_start, occurred_on__lte=period_end, transaction_type=Transaction.TransactionType.EXPENSE).values("category_id", "category__name").annotate(total_minor=Sum("amount_minor")).order_by("category__name", "category_id")
+    categories = [{"category_id": row["category_id"], "category_name": row["category__name"] or "Uncategorized", "total_minor": int(row["total_minor"])} for row in rows]
+    total = sum(row["total_minor"] for row in categories)
+    for row in categories:
+        row["percentage"] = float((Decimal(row["total_minor"] * 100) / Decimal(total)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)) if total else 0.0
+    return {"period_start": period_start, "period_end": period_end, "total_expenses_minor": total, "categories": categories}
+
+
+def cash_flow_report(user, period_start: date, period_end: date) -> dict:
+    row = _report_transactions(user, period_start, period_end).aggregate(
+        income_minor=Coalesce(Sum("amount_minor", filter=Q(transaction_type=Transaction.TransactionType.INCOME)), Value(0), output_field=IntegerField()),
+        expenses_minor=Coalesce(Sum("amount_minor", filter=Q(transaction_type=Transaction.TransactionType.EXPENSE)), Value(0), output_field=IntegerField()),
+    )
+    income = int(row["income_minor"])
+    expenses = int(row["expenses_minor"])
+    return {"period_start": period_start, "period_end": period_end, "income_minor": income, "expenses_minor": expenses, "net_cash_flow_minor": income - expenses}
+
+
+def budget_performance_report(user, period_start: date, period_end: date) -> dict:
+    budgets = list(Budget.objects.filter(owner=user, period_start__lte=period_end, period_end__gte=period_start).select_related("category"))
+    category_ids = {budget.category_id for budget in budgets}
+    spent_rows = Transaction.objects.filter(owner=user, category_id__in=category_ids, transaction_type=Transaction.TransactionType.EXPENSE, occurred_on__gte=period_start, occurred_on__lte=period_end).values("category_id", "occurred_on").annotate(total_minor=Sum("amount_minor")) if category_ids else []
+    spent_by_category_date = {(row["category_id"], row["occurred_on"]): int(row["total_minor"]) for row in spent_rows}
+    results = []
+    for budget in budgets:
+        start = max(budget.period_start, period_start)
+        end = min(budget.period_end, period_end)
+        spent = sum(amount for (category_id, occurred_on), amount in spent_by_category_date.items() if category_id == budget.category_id and start <= occurred_on <= end)
+        limit = budget.amount_minor
+        results.append({"budget_id": budget.id, "name": budget.name, "category_id": budget.category_id, "limit_minor": limit, "spent_minor": spent, "remaining_minor": limit - spent, "percentage_used": float((Decimal(spent * 100) / Decimal(limit)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)), "over_budget": spent > limit})
+    return {"period_start": period_start, "period_end": period_end, "budgets": results}
+
+
+def goal_progress(goal: Goal) -> dict:
+    current = getattr(goal, "current_amount_minor", None)
+    if current is None:
+        current = goal.contributions.aggregate(total=Coalesce(Sum("amount_minor"), Value(0), output_field=IntegerField()))["total"]
+    current = int(current)
+    target = goal.target_amount_minor
+    return {"current_amount_minor": current, "remaining_amount_minor": max(target - current, 0), "progress_percent": float((Decimal(current * 100) / Decimal(target)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))}
 

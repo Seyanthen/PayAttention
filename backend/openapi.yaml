@@ -145,6 +145,69 @@ paths:
       responses:
         '200': {description: Current-month expense summary}
         '401': {description: Authentication required}
+  /goals/:
+    get:
+      description: Returns goals owned by the authenticated user with progress calculated from contributions.
+      responses:
+        '200': {description: User-owned goals}
+        '401': {description: Authentication required}
+    post:
+      description: Creates a goal owned by the authenticated user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GoalInput'}
+      responses:
+        '201': {description: Goal created}
+        '400': {description: Invalid goal data}
+        '401': {description: Authentication required}
+  /goals/{id}/:
+    get:
+      parameters: [{name: id, in: path, required: true, schema: {type: integer}}]
+      responses: {'200': {description: Goal with calculated progress}, '401': {description: Authentication required}, '404': {description: Goal not found}}
+    patch:
+      parameters: [{name: id, in: path, required: true, schema: {type: integer}}]
+      responses: {'200': {description: Updated goal}, '400': {description: Invalid goal data}, '401': {description: Authentication required}}
+    delete:
+      parameters: [{name: id, in: path, required: true, schema: {type: integer}}]
+      responses: {'204': {description: Goal deleted}, '401': {description: Authentication required}}
+  /reports/monthly/:
+    get:
+      parameters:
+        - {name: start, in: query, required: true, schema: {type: string, format: date}}
+        - {name: end, in: query, required: true, schema: {type: string, format: date}}
+      responses:
+        '200': {description: Calendar-month income, expenses, and net cash flow in integer minor units}
+        '400': {description: Invalid or reversed date range}
+        '401': {description: Authentication required}
+  /reports/categories/:
+    get:
+      parameters:
+        - {name: start, in: query, required: true, schema: {type: string, format: date}}
+        - {name: end, in: query, required: true, schema: {type: string, format: date}}
+      responses:
+        '200': {description: Expense totals grouped by category, including Uncategorized}
+        '400': {description: Invalid or reversed date range}
+        '401': {description: Authentication required}
+  /reports/cash-flow/:
+    get:
+      parameters:
+        - {name: start, in: query, required: true, schema: {type: string, format: date}}
+        - {name: end, in: query, required: true, schema: {type: string, format: date}}
+      responses:
+        '200': {description: Income, expenses, and net cash flow excluding transfers}
+        '400': {description: Invalid or reversed date range}
+        '401': {description: Authentication required}
+  /reports/budget-performance/:
+    get:
+      parameters:
+        - {name: start, in: query, required: true, schema: {type: string, format: date}}
+        - {name: end, in: query, required: true, schema: {type: string, format: date}}
+      responses:
+        '200': {description: Applicable budgets with limit, spent, remaining, percentage used, and over-budget status}
+        '400': {description: Invalid or reversed date range}
+        '401': {description: Authentication required}
 components:
   securitySchemes:
     tokenAuth:
@@ -152,4 +215,23 @@ components:
       in: header
       name: Authorization
       description: Use the format `Token <token>`.
+  schemas:
+    GoalInput:
+      type: object
+      required: [name, target_amount_minor, target_date]
+      properties:
+        name: {type: string}
+        target_amount_minor: {type: integer, minimum: 1, description: Integer minor currency units}
+        target_date: {type: string, format: date}
+        currency: {type: string, minLength: 3, maxLength: 3, example: USD}
+        is_completed: {type: boolean}
+    Goal:
+      allOf:
+        - {$ref: '#/components/schemas/GoalInput'}
+        - type: object
+          properties:
+            id: {type: integer}
+            current_amount_minor: {type: integer}
+            remaining_amount_minor: {type: integer}
+            progress_percent: {type: number, format: double}
 
