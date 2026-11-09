@@ -1,6 +1,6 @@
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { ActivityIndicator, StyleSheet, View, useColorScheme } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useEffect, useState } from 'react';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
@@ -9,7 +9,6 @@ import { restoreAuthToken } from '@/services/auth';
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const [isAuthReady, setIsAuthReady] = useState(false);
 
   useEffect(() => {
@@ -34,7 +33,7 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={DefaultTheme}>
       <AnimatedSplashOverlay />
       <Stack screenOptions={{ headerShown: false }} />
     </ThemeProvider>
