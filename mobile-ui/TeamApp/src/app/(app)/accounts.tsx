@@ -13,7 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { required, validatePositiveMinorUnits } from '@/services/validation';
+import { formatMinorUnitsAsDollars, parseDollarAmountToMinorUnits, required, validatePositiveDollarAmount } from '@/services/validation';
 
 type Account = {
   id: number;
@@ -50,7 +50,7 @@ export default function AccountsScreen() {
     setSelectedAccount(account);
     setName(account.name);
     setType(account.type);
-    setBalance(Math.abs(account.balance).toString());
+    setBalance(formatMinorUnitsAsDollars(Math.abs(account.balance)).slice(1));
     setBalanceIsNegative(account.balance < 0);
     setFieldErrors({});
     setModalMode('edit');
@@ -70,10 +70,6 @@ export default function AccountsScreen() {
     Keyboard.dismiss();
     setSelectedAccount(null);
     setModalMode('details');
-  };
-
-  const dismissAmountKeyboard = () => {
-    Keyboard.dismiss();
   };
 
   const deleteAccount = () => {
@@ -101,14 +97,15 @@ export default function AccountsScreen() {
   const saveAccount = () => {
     const nextErrors = {
       name: required(name, 'Account name'),
-      balance: validatePositiveMinorUnits(balance, 'Balance'),
+      balance: validatePositiveDollarAmount(balance, 'Balance'),
     };
     if (nextErrors.name || nextErrors.balance) {
       setFieldErrors(nextErrors);
       return;
     }
 
-    const absoluteBalance = Number(balance.trim());
+    const absoluteBalance = parseDollarAmountToMinorUnits(balance);
+    if (absoluteBalance === undefined) return;
     const parsedBalance = balanceIsNegative ? -absoluteBalance : absoluteBalance;
 
     if (modalMode === 'edit' && selectedAccount) {
@@ -234,7 +231,7 @@ export default function AccountsScreen() {
                   ))}
                 </View>
 
-                <Text style={styles.inputLabel}>Current balance</Text>
+                <Text style={styles.inputLabel}>Current balance in US dollars</Text>
                 <TextInput
                   style={styles.input}
                   value={balance}
@@ -243,7 +240,7 @@ export default function AccountsScreen() {
                     setBalance(event.nativeEvent.text);
                     setFieldErrors((current) => ({ ...current, balance: undefined }));
                   }}
-                  placeholder="e.g. 425075"
+                  placeholder="$0.00"
                   keyboardType="decimal-pad"
                   blurOnSubmit
                 />
@@ -279,7 +276,7 @@ export default function AccountsScreen() {
 }
 
 function formatCurrency(value: number) {
-  return `${value < 0 ? '-' : ''}$${(Math.abs(value) / 100).toFixed(2)}`;
+  return `${value < 0 ? '-' : ''}${formatMinorUnitsAsDollars(Math.abs(value))}`;
 }
 
 const styles = StyleSheet.create({

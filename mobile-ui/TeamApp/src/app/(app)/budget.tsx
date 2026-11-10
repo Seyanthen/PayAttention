@@ -3,6 +3,7 @@ import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'rea
 
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { formatMinorUnitsAsDollars } from '@/services/validation';
 
 type BudgetCategory = {
   id: string;
@@ -15,20 +16,20 @@ type BudgetCategory = {
 
 const monthData: Record<string, BudgetCategory[]> = {
   September: [
-    { id: 'groceries', name: 'Groceries', spent: 327, limit: 500, color: '#4D9DE0', icon: '🛒' },
-    { id: 'restaurants', name: 'Restaurants', spent: 184, limit: 250, color: '#E07A5F', icon: '🍽️' },
-    { id: 'entertainment', name: 'Entertainment', spent: 140, limit: 150, color: '#9B8AFB', icon: '🎬' },
-    { id: 'transportation', name: 'Transportation', spent: 96, limit: 180, color: '#55A878', icon: '🚗' },
+    { id: 'groceries', name: 'Groceries', spent: 32700, limit: 50000, color: '#4D9DE0', icon: '🛒' },
+    { id: 'restaurants', name: 'Restaurants', spent: 18400, limit: 25000, color: '#E07A5F', icon: '🍽️' },
+    { id: 'entertainment', name: 'Entertainment', spent: 14000, limit: 15000, color: '#9B8AFB', icon: '🎬' },
+    { id: 'transportation', name: 'Transportation', spent: 9600, limit: 18000, color: '#55A878', icon: '🚗' },
   ],
   October: [
-    { id: 'groceries', name: 'Groceries', spent: 214, limit: 500, color: '#4D9DE0', icon: '🛒' },
-    { id: 'restaurants', name: 'Restaurants', spent: 128, limit: 250, color: '#E07A5F', icon: '🍽️' },
-    { id: 'entertainment', name: 'Entertainment', spent: 72, limit: 150, color: '#9B8AFB', icon: '🎬' },
-    { id: 'transportation', name: 'Transportation', spent: 54, limit: 180, color: '#55A878', icon: '🚗' },
+    { id: 'groceries', name: 'Groceries', spent: 21400, limit: 50000, color: '#4D9DE0', icon: '🛒' },
+    { id: 'restaurants', name: 'Restaurants', spent: 12800, limit: 25000, color: '#E07A5F', icon: '🍽️' },
+    { id: 'entertainment', name: 'Entertainment', spent: 7200, limit: 15000, color: '#9B8AFB', icon: '🎬' },
+    { id: 'transportation', name: 'Transportation', spent: 5400, limit: 18000, color: '#55A878', icon: '🚗' },
   ],
 };
 
-const formatCurrency = (amount: number) => `$${amount.toLocaleString('en-US')}`;
+const formatCurrency = (amount: number) => formatMinorUnitsAsDollars(amount);
 
 export default function BudgetScreen() {
   const theme = useTheme();

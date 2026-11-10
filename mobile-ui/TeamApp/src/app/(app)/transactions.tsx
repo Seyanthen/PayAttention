@@ -17,7 +17,7 @@ import {
   Alert,
 } from 'react-native';
 import { authenticatedGet, getApiErrorMessage } from '@/services/api';
-import { validateTransaction, validateTransactionFilters, type ValidationErrors } from '@/services/validation';
+import { parseDollarAmountToMinorUnits, validateTransaction, validateTransactionFilters, type ValidationErrors } from '@/services/validation';
 
 type TransactionKind = 'expense' | 'income' | 'transfer';
 
@@ -52,8 +52,8 @@ type TransactionFilters = {
   transactionType: '' | TransactionKind;
   startDate: string;
   endDate: string;
-  minAmountMinor: string;
-  maxAmountMinor: string;
+  minAmountDollars: string;
+  maxAmountDollars: string;
 };
 
 const initialTransactions: Transaction[] = [];
@@ -65,7 +65,7 @@ export default function TransactionsScreen() {
   const [transactions, setTransactions] = useState(initialTransactions);
   const [accounts, setAccounts] = useState<Lookup[]>([]);
   const [lookupCategories, setLookupCategories] = useState<Lookup[]>([]);
-  const [filters, setFilters] = useState<TransactionFilters>({ search: '', account: '', category: '', transactionType: '', startDate: '', endDate: '', minAmountMinor: '', maxAmountMinor: '' });
+  const [filters, setFilters] = useState<TransactionFilters>({ search: '', account: '', category: '', transactionType: '', startDate: '', endDate: '', minAmountDollars: '', maxAmountDollars: '' });
   const [filterErrors, setFilterErrors] = useState<ValidationErrors>({});
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -109,8 +109,10 @@ export default function TransactionsScreen() {
     if (nextFilters.transactionType) query.set('transaction_type', nextFilters.transactionType);
     if (nextFilters.startDate.trim()) query.set('start_date', nextFilters.startDate.trim());
     if (nextFilters.endDate.trim()) query.set('end_date', nextFilters.endDate.trim());
-    if (nextFilters.minAmountMinor.trim()) query.set('min_amount_minor', nextFilters.minAmountMinor.trim());
-    if (nextFilters.maxAmountMinor.trim()) query.set('max_amount_minor', nextFilters.maxAmountMinor.trim());
+    const minAmount = parseDollarAmountToMinorUnits(nextFilters.minAmountDollars, true);
+    const maxAmount = parseDollarAmountToMinorUnits(nextFilters.maxAmountDollars, true);
+    if (minAmount !== undefined) query.set('min_amount_minor', String(minAmount));
+    if (maxAmount !== undefined) query.set('max_amount_minor', String(maxAmount));
     return query.toString();
   }
 
@@ -165,7 +167,7 @@ export default function TransactionsScreen() {
   };
 
   const clearFilters = () => {
-    const cleared: TransactionFilters = { search: '', account: '', category: '', transactionType: '', startDate: '', endDate: '', minAmountMinor: '', maxAmountMinor: '' };
+    const cleared: TransactionFilters = { search: '', account: '', category: '', transactionType: '', startDate: '', endDate: '', minAmountDollars: '', maxAmountDollars: '' };
     setFilters(cleared);
     setFilterErrors({});
     void loadTransactions(true, cleared);
@@ -195,7 +197,7 @@ export default function TransactionsScreen() {
   const saveTransaction = () => {
     const nextErrors = validateTransaction({
       merchant,
-      amountMinor: amount,
+      amountDollars: amount,
       date,
       transactionType: kind,
       categoryType: kind === 'income' ? 'income' : kind === 'expense' ? 'expense' : undefined,
@@ -206,7 +208,9 @@ export default function TransactionsScreen() {
       setFieldErrors(nextErrors);
       return;
     }
-    setTransactions((current) => [{ id: Date.now(), merchant: merchant.trim(), amount: Number(amount.trim()), category, account, date: date.trim(), notes: notes.trim(), kind }, ...current]);
+    const amountMinor = parseDollarAmountToMinorUnits(amount);
+    if (amountMinor === undefined) return;
+    setTransactions((current) => [{ id: Date.now(), merchant: merchant.trim(), amount: amountMinor, category, account, date: date.trim(), notes: notes.trim(), kind }, ...current]);
     closeModal();
   };
 
@@ -285,8 +289,8 @@ export default function TransactionsScreen() {
             <View style={styles.filterColumn}><Text style={styles.inputLabel}>End date</Text><TextInput style={styles.input} value={filters.endDate} onChangeText={(value) => { setFilters((current) => ({ ...current, endDate: value })); setFilterErrors((current) => ({ ...current, endDate: undefined })); }} placeholder="YYYY-MM-DD" />{filterErrors.endDate ? <Text style={styles.fieldError}>{filterErrors.endDate}</Text> : null}</View>
           </View>
           <View style={styles.filterColumns}>
-            <View style={styles.filterColumn}><Text style={styles.inputLabel}>Minimum amount (minor units)</Text><TextInput style={styles.input} value={filters.minAmountMinor} onChangeText={(value) => { setFilters((current) => ({ ...current, minAmountMinor: value })); setFilterErrors((current) => ({ ...current, minAmountMinor: undefined, maxAmountMinor: undefined })); }} placeholder="2500" keyboardType="number-pad" />{filterErrors.minAmountMinor ? <Text style={styles.fieldError}>{filterErrors.minAmountMinor}</Text> : null}</View>
-            <View style={styles.filterColumn}><Text style={styles.inputLabel}>Maximum amount (minor units)</Text><TextInput style={styles.input} value={filters.maxAmountMinor} onChangeText={(value) => { setFilters((current) => ({ ...current, maxAmountMinor: value })); setFilterErrors((current) => ({ ...current, maxAmountMinor: undefined })); }} placeholder="10000" keyboardType="number-pad" />{filterErrors.maxAmountMinor ? <Text style={styles.fieldError}>{filterErrors.maxAmountMinor}</Text> : null}</View>
+            <View style={styles.filterColumn}><Text style={styles.inputLabel}>Minimum amount in US dollars</Text><TextInput style={styles.input} value={filters.minAmountDollars} onChangeText={(value) => { setFilters((current) => ({ ...current, minAmountDollars: value })); setFilterErrors((current) => ({ ...current, minAmountDollars: undefined, maxAmountDollars: undefined })); }} placeholder="$0.00" keyboardType="decimal-pad" />{filterErrors.minAmountDollars ? <Text style={styles.fieldError}>{filterErrors.minAmountDollars}</Text> : null}</View>
+            <View style={styles.filterColumn}><Text style={styles.inputLabel}>Maximum amount in US dollars</Text><TextInput style={styles.input} value={filters.maxAmountDollars} onChangeText={(value) => { setFilters((current) => ({ ...current, maxAmountDollars: value })); setFilterErrors((current) => ({ ...current, maxAmountDollars: undefined })); }} placeholder="$0.00" keyboardType="decimal-pad" />{filterErrors.maxAmountDollars ? <Text style={styles.fieldError}>{filterErrors.maxAmountDollars}</Text> : null}</View>
           </View>
           <View style={styles.filterActions}>
             <Pressable accessibilityRole="button" style={[styles.primaryButton, isRefreshing && styles.buttonDisabled]} onPress={applyFilters} disabled={isRefreshing}>{isRefreshing ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Apply filters</Text>}</Pressable>
@@ -348,7 +352,7 @@ export default function TransactionsScreen() {
               ) : (
                 <ScrollView keyboardShouldPersistTaps="handled">
                   <Text style={styles.inputLabel}>Description</Text><TextInput style={styles.input} value={merchant} onChangeText={(value) => { setMerchant(value); setFieldErrors((current) => ({ ...current, merchant: undefined })); }} placeholder="e.g. Coffee shop" />{fieldErrors.merchant ? <Text style={styles.fieldError}>{fieldErrors.merchant}</Text> : null}
-                  <Text style={styles.inputLabel}>Amount (minor units)</Text><TextInput style={styles.input} value={amount} onChangeText={(value) => { setAmount(value); setFieldErrors((current) => ({ ...current, amountMinor: undefined })); }} placeholder="e.g. 1250" keyboardType="number-pad" />{fieldErrors.amountMinor ? <Text style={styles.fieldError}>{fieldErrors.amountMinor}</Text> : null}
+                  <Text style={styles.inputLabel}>Amount in US dollars</Text><TextInput style={styles.input} value={amount} onChangeText={(value) => { setAmount(value); setFieldErrors((current) => ({ ...current, amountMinor: undefined })); }} placeholder="$0.00" keyboardType="decimal-pad" />{fieldErrors.amountMinor ? <Text style={styles.fieldError}>{fieldErrors.amountMinor}</Text> : null}
                   <Text style={styles.inputLabel}>Date</Text><TextInput style={styles.input} value={date} onChangeText={(value) => { setDate(value); setFieldErrors((current) => ({ ...current, occurredOn: undefined })); }} placeholder="YYYY-MM-DD" />{fieldErrors.occurredOn ? <Text style={styles.fieldError}>{fieldErrors.occurredOn}</Text> : null}
                   <Text style={styles.inputLabel}>Type</Text>
                   <View style={styles.optionRow}>{(['expense', 'income', 'transfer'] as TransactionKind[]).map((option) => <Pressable key={option} style={[styles.optionButton, kind === option && styles.selectedOption]} onPress={() => { setKind(option); setFieldErrors((current) => ({ ...current, category: undefined, transferAccount: undefined })); }}><Text style={[styles.optionText, kind === option && styles.selectedOptionText]}>{option[0].toUpperCase() + option.slice(1)}</Text></Pressable>)}</View>

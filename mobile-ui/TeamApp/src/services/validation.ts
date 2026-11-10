@@ -3,7 +3,7 @@ export type ValidationErrors = Record<string, string | undefined>;
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const CURRENCY_PATTERN = /^[A-Za-z]{3}$/;
 const POSITIVE_MINOR_UNIT_PATTERN = /^[1-9]\d*$/;
-const NON_NEGATIVE_MINOR_UNIT_PATTERN = /^\d+$/;
+const POSITIVE_DOLLAR_PATTERN = /^\$?\d+(?:\.\d{1,2})?$/;
 
 export function required(value: string, label: string): string | undefined {
   return value.trim() ? undefined : `${label} is required.`;
@@ -29,11 +29,42 @@ export function validatePositiveMinorUnits(value: string, label = "Amount"): str
     : undefined;
 }
 
+/** Convert a user-entered dollar amount to integer minor units without float math. */
+export function parseDollarAmountToMinorUnits(value: string, allowZero = false): number | undefined {
+  const trimmed = value.trim();
+  if (!POSITIVE_DOLLAR_PATTERN.test(trimmed)) return undefined;
+
+  const normalized = trimmed.startsWith("$") ? trimmed.slice(1) : trimmed;
+  const [wholePart, fractionalPart = ""] = normalized.split(".");
+  const whole = Number(wholePart);
+  const cents = Number(fractionalPart.padEnd(2, "0"));
+  if (!Number.isSafeInteger(whole) || !Number.isSafeInteger(cents)) return undefined;
+
+  const minorUnits = whole * 100 + cents;
+  return Number.isSafeInteger(minorUnits) && (allowZero ? minorUnits >= 0 : minorUnits > 0) ? minorUnits : undefined;
+}
+
+export function formatMinorUnitsAsDollars(value: number): string {
+  return `$${(value / 100).toFixed(2)}`;
+}
+
+export function validatePositiveDollarAmount(value: string, label = "Amount"): string | undefined {
+  return parseDollarAmountToMinorUnits(value) === undefined
+    ? `${label} must be a positive dollar amount with up to two decimal places.`
+    : undefined;
+}
+
+export function validateNonNegativeDollarAmount(value: string, label = "Amount"): string | undefined {
+  return parseDollarAmountToMinorUnits(value, true) === undefined
+    ? `${label} must be a non-negative dollar amount with up to two decimal places.`
+    : undefined;
+}
+
 export function validateTransactionFilters(input: {
   startDate: string;
   endDate: string;
-  minAmountMinor: string;
-  maxAmountMinor: string;
+  minAmountDollars: string;
+  maxAmountDollars: string;
   transactionType: string;
 }): ValidationErrors {
   const errors: ValidationErrors = {};
@@ -46,15 +77,18 @@ export function validateTransactionFilters(input: {
   }
 
   for (const [key, value, label] of [
-    ["minAmountMinor", input.minAmountMinor, "Minimum amount"],
-    ["maxAmountMinor", input.maxAmountMinor, "Maximum amount"],
+    ["minAmountDollars", input.minAmountDollars, "Minimum amount"],
+    ["maxAmountDollars", input.maxAmountDollars, "Maximum amount"],
   ] as const) {
-    if (value.trim() && !NON_NEGATIVE_MINOR_UNIT_PATTERN.test(value.trim())) {
-      errors[key] = `${label} must be a non-negative whole number of minor units.`;
+    if (value.trim()) {
+      const error = validateNonNegativeDollarAmount(value, label);
+      if (error) errors[key] = error;
     }
   }
-  if (!errors.minAmountMinor && !errors.maxAmountMinor && input.minAmountMinor && input.maxAmountMinor && Number(input.minAmountMinor) > Number(input.maxAmountMinor)) {
-    errors.maxAmountMinor = "Maximum amount must be greater than or equal to minimum amount.";
+  const minAmount = parseDollarAmountToMinorUnits(input.minAmountDollars, true);
+  const maxAmount = parseDollarAmountToMinorUnits(input.maxAmountDollars, true);
+  if (!errors.minAmountDollars && !errors.maxAmountDollars && minAmount !== undefined && maxAmount !== undefined && minAmount > maxAmount) {
+    errors.maxAmountDollars = "Maximum amount must be greater than or equal to minimum amount.";
   }
   if (input.transactionType && !["expense", "income", "transfer"].includes(input.transactionType)) {
     errors.transactionType = "Select a valid transaction type.";
@@ -74,7 +108,7 @@ export function validateIsoDate(value: string, label = "Date"): string | undefin
 
 export type TransactionValidationInput = {
   merchant: string;
-  amountMinor: string;
+  amountDollars: string;
   date: string;
   transactionType: "expense" | "income" | "transfer";
   categoryType?: "expense" | "income";
@@ -86,7 +120,7 @@ export type TransactionValidationInput = {
 export function validateTransaction(input: TransactionValidationInput): ValidationErrors {
   const errors: ValidationErrors = {};
   const merchantError = required(input.merchant, "Description");
-  const amountError = validatePositiveMinorUnits(input.amountMinor);
+  const amountError = validatePositiveDollarAmount(input.amountDollars);
   const dateError = validateIsoDate(input.date);
   const accountError = required(input.account, "Account");
   if (merchantError) errors.merchant = merchantError;

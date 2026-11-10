@@ -1,4 +1,4 @@
-import { validateBudget, validateCurrency, validateTransaction, validatePositiveMinorUnits } from './validation';
+import { parseDollarAmountToMinorUnits, validateBudget, validateCurrency, validateTransaction, validatePositiveDollarAmount, validatePositiveMinorUnits } from './validation';
 
 function assertEqual(actual: unknown, expected: unknown, message: string) {
   if (actual !== expected) throw new Error(`${message}: expected ${String(expected)}, got ${String(actual)}`);
@@ -12,13 +12,21 @@ assertEqual(validatePositiveMinorUnits(''), undefined, 'empty amount');
 assertEqual(validatePositiveMinorUnits('-1'), undefined, 'negative amount');
 assertEqual(validatePositiveMinorUnits('1.25'), undefined, 'decimal amount');
 assertEqual(validatePositiveMinorUnits('NaN'), undefined, 'NaN amount');
+assertEqual(parseDollarAmountToMinorUnits('10'), 1000, 'whole dollar amount');
+assertEqual(parseDollarAmountToMinorUnits('10.5'), 1050, 'one decimal dollar amount');
+assertEqual(parseDollarAmountToMinorUnits('$10.50'), 1050, 'currency-formatted dollar amount');
+assertEqual(parseDollarAmountToMinorUnits('0.99'), 99, 'sub-dollar amount');
+assertEqual(parseDollarAmountToMinorUnits('10.005'), undefined, 'too many decimal places');
+assertEqual(parseDollarAmountToMinorUnits('-1'), undefined, 'negative dollar amount');
+assertEqual(parseDollarAmountToMinorUnits('abc'), undefined, 'non-numeric dollar amount');
+assertEqual(validatePositiveDollarAmount(''), 'Amount must be a positive dollar amount with up to two decimal places.', 'empty dollar amount');
 assertEqual(validateCurrency('US'), 'Currency must be a three-letter code, such as USD.', 'invalid currency');
 
 assertEqual(validateCurrency('usd'), undefined, 'valid currency');
 assertEqual(validatePositiveMinorUnits('1250'), 1250, 'valid amount');
 assertEmpty(validateTransaction({
     merchant: 'Groceries',
-    amountMinor: '1250',
+    amountDollars: '12.50',
     date: '2026-10-26',
     transactionType: 'expense',
     categoryType: 'expense',
@@ -27,7 +35,7 @@ assertEmpty(validateTransaction({
 
 const transactionErrors = validateTransaction({
     merchant: 'Transfer',
-    amountMinor: '100',
+    amountDollars: '1.00',
     date: '10/26/2026',
     transactionType: 'transfer',
     account: 'checking-id',

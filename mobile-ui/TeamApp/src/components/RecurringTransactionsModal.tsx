@@ -19,6 +19,7 @@ import {
     type RecurringTransaction,
     updateRecurringTransaction,
 } from "@/services/api";
+import { formatMinorUnitsAsDollars, parseDollarAmountToMinorUnits, validatePositiveDollarAmount } from "@/services/validation";
 
 type ModalMode = "list" | "create";
 
@@ -30,7 +31,7 @@ type RecurringTransactionsModalProps = {
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
-const money = (minor: number) => `$${(Math.abs(minor) / 100).toFixed(2)}`;
+const money = (minor: number) => formatMinorUnitsAsDollars(Math.abs(minor));
 
 export default function RecurringTransactionsModal({
     visible,
@@ -98,7 +99,7 @@ export default function RecurringTransactionsModal({
     function openEdit(row: RecurringTransaction) {
         setEditing(row);
         setName(row.name);
-        setAmount(String(row.amount_minor));
+        setAmount(formatMinorUnitsAsDollars(row.amount_minor).slice(1));
         setType(row.transaction_type);
         setFrequency(row.frequency);
         setNext(row.next_occurrence);
@@ -115,9 +116,9 @@ export default function RecurringTransactionsModal({
     }
 
     async function save() {
-        const amountMinor = Number(amount.trim());
-        if (!name.trim() || !Number.isInteger(amountMinor) || amountMinor < 1 || !/^\d{4}-\d{2}-\d{2}$/.test(next)) {
-            setError("Enter a name, a positive amount in cents, and a valid date (YYYY-MM-DD).");
+        const amountMinor = parseDollarAmountToMinorUnits(amount);
+        if (!name.trim() || amountMinor === undefined || !/^\d{4}-\d{2}-\d{2}$/.test(next)) {
+            setError(validatePositiveDollarAmount(amount) ?? "Enter a name and a valid date (YYYY-MM-DD).");
             return;
         }
 
@@ -221,7 +222,7 @@ export default function RecurringTransactionsModal({
                         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.form}>
                             {error ? <View style={styles.error}><Text style={styles.errorText}>{error}</Text></View> : null}
                             <TextInput style={styles.input} placeholder="Name" value={name} onChangeText={setName} />
-                            <TextInput style={styles.input} placeholder="Amount in cents" keyboardType="number-pad" value={amount} onChangeText={setAmount} />
+                            <TextInput style={styles.input} placeholder="$0.00" keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
                             <TextInput style={styles.input} placeholder="Next date (YYYY-MM-DD)" value={next} onChangeText={setNext} />
                             <Text style={styles.label}>Transaction type</Text>
                             <View style={styles.options}>{(["expense", "income"] as const).map((item) => <Pressable key={item} style={[styles.option, type === item && styles.selected]} onPress={() => setType(item)}><Text>{item}</Text></Pressable>)}</View>

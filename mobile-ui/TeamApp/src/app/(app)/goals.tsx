@@ -15,6 +15,7 @@ import {
 
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { formatMinorUnitsAsDollars, parseDollarAmountToMinorUnits, validatePositiveDollarAmount } from '@/services/validation';
 
 type SavingsGoal = {
   id: string;
@@ -27,12 +28,12 @@ type SavingsGoal = {
 };
 
 const initialGoals: SavingsGoal[] = [
-  { id: 'emergency-fund', name: 'Emergency fund', saved: 4200, target: 10000, deadline: 'Dec 2026', color: '#55A878', icon: 'EF' },
-  { id: 'new-laptop', name: 'New laptop', saved: 950, target: 2400, deadline: 'Aug 2026', color: '#9B8AFB', icon: 'NL' },
-  { id: 'weekend-trip', name: 'Weekend trip', saved: 620, target: 1200, deadline: 'Jun 2026', color: '#E07A5F', icon: 'WT' },
+  { id: 'emergency-fund', name: 'Emergency fund', saved: 420000, target: 1000000, deadline: 'Dec 2026', color: '#55A878', icon: 'EF' },
+  { id: 'new-laptop', name: 'New laptop', saved: 95000, target: 240000, deadline: 'Aug 2026', color: '#9B8AFB', icon: 'NL' },
+  { id: 'weekend-trip', name: 'Weekend trip', saved: 62000, target: 120000, deadline: 'Jun 2026', color: '#E07A5F', icon: 'WT' },
 ];
 
-const formatCurrency = (amount: number) => `$${amount.toLocaleString('en-US')}`;
+const formatCurrency = (amount: number) => formatMinorUnitsAsDollars(amount);
 
 export default function GoalsScreen() {
   const theme = useTheme();
@@ -56,10 +57,10 @@ export default function GoalsScreen() {
   const closeModal = () => { Keyboard.dismiss(); setIsModalVisible(false); };
   const createGoal = () => {
     const trimmedName = name.trim();
-    const targetAmount = Number(target);
-    const savedAmount = saved.trim() ? Number(saved) : 0;
-    if (!trimmedName || !Number.isFinite(targetAmount) || targetAmount <= 0 || !Number.isFinite(savedAmount) || savedAmount < 0 || savedAmount > targetAmount) {
-      setError('Enter a name, a target greater than $0, and saved amount up to the target.');
+    const targetAmount = parseDollarAmountToMinorUnits(target);
+    const savedAmount = saved.trim() ? parseDollarAmountToMinorUnits(saved, true) : 0;
+    if (!trimmedName || targetAmount === undefined || savedAmount === undefined || savedAmount > targetAmount) {
+      setError(validatePositiveDollarAmount(target, 'Target amount') ?? 'Enter a valid saved amount up to the target.');
       return;
     }
     setGoals((current) => [...current, {
@@ -100,7 +101,7 @@ export default function GoalsScreen() {
             <View style={styles.modalHeader}><View><Text style={[styles.modalTitle, { color: theme.text }]}>New savings goal</Text><Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>Set a target and start making progress.</Text></View><Pressable accessibilityLabel="Close savings goal form" onPress={closeModal}><Text style={[styles.closeButton, { color: theme.textSecondary }]}>Close</Text></Pressable></View>
             <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Goal name</Text>
             <TextInput autoFocus style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]} placeholder="e.g. Emergency fund" placeholderTextColor={theme.textSecondary} value={name} onChangeText={setName} />
-            <View style={styles.inputRow}><View style={styles.inputColumn}><Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Target amount</Text><TextInput style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]} placeholder="$0" placeholderTextColor={theme.textSecondary} keyboardType="decimal-pad" value={target} onChangeText={setTarget} /></View><View style={styles.inputColumn}><Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Already saved</Text><TextInput style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]} placeholder="$0" placeholderTextColor={theme.textSecondary} keyboardType="decimal-pad" value={saved} onChangeText={setSaved} /></View></View>
+            <View style={styles.inputRow}><View style={styles.inputColumn}><Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Target amount in US dollars</Text><TextInput style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]} placeholder="$0.00" placeholderTextColor={theme.textSecondary} keyboardType="decimal-pad" value={target} onChangeText={setTarget} /></View><View style={styles.inputColumn}><Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Already saved in US dollars</Text><TextInput style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]} placeholder="$0.00" placeholderTextColor={theme.textSecondary} keyboardType="decimal-pad" value={saved} onChangeText={setSaved} /></View></View>
             <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Target date <Text style={styles.optionalText}>(optional)</Text></Text>
             <TextInput style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]} placeholder="e.g. Dec 2026" placeholderTextColor={theme.textSecondary} value={deadline} onChangeText={setDeadline} />
             {error ? <Text style={styles.formError}>{error}</Text> : null}
