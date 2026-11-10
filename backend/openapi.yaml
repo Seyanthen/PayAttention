@@ -75,6 +75,55 @@ paths:
     get: {responses: {'200': {description: Category details}, '404': {description: Category not found}}}
     put: {responses: {'200': {description: Category updated}, '400': {description: Invalid category data}}}
     delete: {responses: {'204': {description: Category deleted}, '404': {description: Category not found}}}
+  /recurring-transactions/:
+    get:
+      description: Returns recurring transactions owned by the authenticated user. The default and active=true return active records only; active=false returns inactive records; active=all returns both.
+      parameters:
+        - name: active
+          in: query
+          required: false
+          schema: {type: string, enum: [true, false, all], default: true}
+      responses:
+        '200': {description: Deterministically ordered recurring transactions}
+        '400': {description: Invalid active filter}
+        '401': {description: Authentication required}
+    post:
+      description: Creates an owned recurring transaction. Money is an integer number of minor units and dates use ISO YYYY-MM-DD format.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RecurringTransactionInput'}
+      responses:
+        '201': {description: Recurring transaction created}
+        '400': {description: Invalid recurring transaction data}
+        '401': {description: Authentication required}
+  /recurring-transactions/{id}/:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: integer}}
+    get:
+      description: Returns an owned recurring transaction.
+      responses: {'200': {description: Recurring transaction}, '401': {description: Authentication required}, '404': {description: Not found}}
+    patch:
+      description: Updates an owned recurring transaction, including is_active for deactivation or reactivation.
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RecurringTransactionInput'}
+      responses: {'200': {description: Updated recurring transaction}, '400': {description: Invalid data}, '401': {description: Authentication required}, '404': {description: Not found}}
+    delete:
+      description: Deletes an owned recurring transaction.
+      responses: {'204': {description: Recurring transaction deleted}, '401': {description: Authentication required}, '404': {description: Not found}}
+  /recurring-transactions/{id}/advance/:
+    post:
+      description: Advances an active owned schedule by one frequency interval. This updates next_occurrence only and does not create a posted transaction. Monthly dates preserve the day when possible and clamp to the target month's last day. Calendar dates are interpreted as date-only UTC business dates.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer}}
+      responses:
+        '200': {description: Schedule advanced}
+        '400': {description: Inactive schedule or unsupported frequency}
+        '401': {description: Authentication required}
+        '404': {description: Not found}
   /transactions/:
     get:
       description: Returns only transactions owned by the authenticated user.
@@ -234,4 +283,23 @@ components:
             current_amount_minor: {type: integer}
             remaining_amount_minor: {type: integer}
             progress_percent: {type: number, format: double}
+    RecurringTransactionInput:
+      type: object
+      required: [name, amount_minor, transaction_type, frequency, next_occurrence]
+      properties:
+        name: {type: string, maxLength: 160}
+        amount_minor: {type: integer, minimum: 1, description: Integer minor currency units; never floating point}
+        transaction_type: {type: string, enum: [income, expense]}
+        frequency: {type: string, enum: [weekly, biweekly, monthly]}
+        next_occurrence: {type: string, format: date, description: ISO YYYY-MM-DD calendar date}
+        is_active: {type: boolean, default: true}
+        currency: {type: string, minLength: 3, maxLength: 3, example: USD}
+    RecurringTransaction:
+      allOf:
+        - {$ref: '#/components/schemas/RecurringTransactionInput'}
+        - type: object
+          properties:
+            id: {type: integer}
+            created_at: {type: string, format: date-time}
+            updated_at: {type: string, format: date-time}
 

@@ -251,8 +251,8 @@ export type RecurringTransaction = {
   currency: string;
 };
 
-export async function getRecurringTransactions(): Promise<RecurringTransaction[]> {
-  const response = await authenticatedGet('/recurring-transactions/?active=true');
+export async function getRecurringTransactions(includeInactive = false): Promise<RecurringTransaction[]> {
+  const response = await authenticatedGet(`/recurring-transactions/?active=${includeInactive ? 'all' : 'true'}`);
   const rows: unknown = await response.json();
   if (!Array.isArray(rows)) throw new ApiError('The service returned an invalid response. Please try again.', 'invalid_response', { retryable: false });
   return rows as RecurringTransaction[];
@@ -265,6 +265,11 @@ export async function createRecurringTransaction(payload: Omit<RecurringTransact
 
 export async function updateRecurringTransaction(id: number, payload: Partial<Omit<RecurringTransaction, 'id'>>): Promise<RecurringTransaction> {
   const response = await authenticatedFetch(`/recurring-transactions/${id}/`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  return response.json() as Promise<RecurringTransaction>;
+}
+
+export async function advanceRecurringTransaction(id: number): Promise<RecurringTransaction> {
+  const response = await authenticatedFetch(`/recurring-transactions/${id}/advance/`, { method: 'POST' });
   return response.json() as Promise<RecurringTransaction>;
 }
 

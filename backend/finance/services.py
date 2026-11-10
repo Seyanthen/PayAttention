@@ -25,6 +25,20 @@ def next_recurring_date(current: date, frequency: str) -> date:
     raise ValueError("Unsupported recurring transaction frequency")
 
 
+def advance_recurring_transaction(recurring_transaction):
+    """Advance one recurring schedule and persist its next occurrence.
+
+    This intentionally advances the schedule only; it does not create a posted
+    transaction. The caller is responsible for ownership and authorization.
+    """
+    recurring_transaction.next_occurrence = next_recurring_date(
+        recurring_transaction.next_occurrence,
+        recurring_transaction.frequency,
+    )
+    recurring_transaction.save(update_fields=["next_occurrence", "updated_at"])
+    return recurring_transaction
+
+
 def transactions_by_account(user, account_id: int, start_date: date | None = None, end_date: date | None = None):
     """Return a user's transactions for one account, optionally within a date range.
 

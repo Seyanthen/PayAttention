@@ -5,7 +5,7 @@ from django.urls import reverse
 from rest_framework.test import APITestCase
 
 from .models import Account, Budget, Category, Goal, GoalContribution, RecurringTransaction, Transaction
-from .services import account_balance_minor, expenses_minor, financial_summary, income_minor, monthly_expenses_minor, monthly_income_minor, monthly_net_cash_flow_minor, next_recurring_date, user_total_assets_minor, user_total_balance_minor
+from .services import account_balance_minor, advance_recurring_transaction, expenses_minor, financial_summary, income_minor, monthly_expenses_minor, monthly_income_minor, monthly_net_cash_flow_minor, next_recurring_date, user_total_assets_minor, user_total_balance_minor
 
 
 class FinanceApiTests(APITestCase):
@@ -368,6 +368,17 @@ class FinanceApiTests(APITestCase):
         self.assertEqual([row["id"] for row in response.data], [first.id, later.id])
         self.assertEqual(self.client.get(reverse("recurring-transaction-detail", args=[foreign.id])).status_code, 404)
 
+    def test_recurring_list_defaults_to_active_and_supports_explicit_status_filters(self):
+        active = RecurringTransaction.objects.create(owner=self.user, name="Active", amount_minor=100, transaction_type="expense", frequency="weekly", next_occurrence=date(2026, 10, 1))
+        inactive = RecurringTransaction.objects.create(owner=self.user, name="Inactive", amount_minor=200, transaction_type="expense", frequency="weekly", next_occurrence=date(2026, 10, 2), is_active=False)
+        self.assertEqual([row["id"] for row in self.client.get(reverse("recurring-transaction-list")).data], [active.id])
+        self.assertEqual([row["id"] for row in self.client.get(reverse("recurring-transaction-list"), {"active": "false"}).data], [inactive.id])
+        self.assertEqual({row["id"] for row in self.client.get(reverse("recurring-transaction-list"), {"active": "all"}).data}, {active.id, inactive.id})
+        self.assertEqual(self.client.get(reverse("recurring-transaction-list"), {"active": "invalid"}).status_code, 400)
+        response = self.client.patch(reverse("recurring-transaction-detail", args=[inactive.id]), {"is_active": True}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["is_active"])
+
     def test_recurring_transaction_crud_and_validation(self):
         response = self.client.post(reverse("recurring-transaction-list"), {
             "name": " Rent ", "amount_minor": 95000, "transaction_type": "expense",
@@ -392,6 +403,22 @@ class FinanceApiTests(APITestCase):
         self.assertEqual(next_recurring_date(date(2028, 1, 31), "monthly"), date(2028, 2, 29))
         self.assertEqual(next_recurring_date(date(2026, 10, 1), "weekly"), date(2026, 10, 8))
         self.assertEqual(next_recurring_date(date(2026, 10, 2), "biweekly"), date(2026, 10, 16))
+
+    def test_recurring_advance_endpoint_persists_schedule_without_creating_transaction(self):
+        recurring = RecurringTransaction.objects.create(owner=self.user, name="Rent", amount_minor=95000, transaction_type="expense", frequency="monthly", next_occurrence=date(2028, 1, 31))
+        response = self.client.post(reverse("recurring-transaction-advance", args=[recurring.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["next_occurrence"], "2028-02-29")
+        self.assertEqual(Transaction.objects.count(), 0)
+        self.assertEqual(self.client.post(reverse("recurring-transaction-advance", args=[recurring.id])).status_code, 200)
+        recurring.refresh_from_db()
+        self.assertEqual(recurring.next_occurrence, date(2028, 3, 29))
+
+    def test_recurring_advance_rejects_inactive_and_hides_foreign_records(self):
+        inactive = RecurringTransaction.objects.create(owner=self.user, name="Paused", amount_minor=100, transaction_type="expense", frequency="weekly", next_occurrence=date(2026, 10, 1), is_active=False)
+        foreign = RecurringTransaction.objects.create(owner=self.other_user, name="Private", amount_minor=100, transaction_type="expense", frequency="weekly", next_occurrence=date(2026, 10, 1))
+        self.assertEqual(self.client.post(reverse("recurring-transaction-advance", args=[inactive.id])).status_code, 400)
+        self.assertEqual(self.client.post(reverse("recurring-transaction-advance", args=[foreign.id])).status_code, 404)
     def test_monthly_report_is_inclusive_and_excludes_transfers(self):
         Transaction.objects.create(owner=self.user, account=self.account, category=self.income_category, transaction_type="income", amount_minor=10000, occurred_on=date(2026, 1, 1))
         Transaction.objects.create(owner=self.user, account=self.account, category=self.expense_category, transaction_type="expense", amount_minor=2500, occurred_on=date(2026, 1, 31))

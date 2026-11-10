@@ -12,6 +12,7 @@ import {
 
 import { logout } from "@/services/auth";
 import { getApiErrorMessage, getRecurringTransactions, type RecurringTransaction } from "@/services/api";
+import RecurringTransactionsModal from "@/components/RecurringTransactionsModal";
 
 const spendingCategories = [
     { name: "Housing", percentage: 42, color: "#2563eb" },
@@ -37,6 +38,8 @@ export default function DashboardScreen() {
     const [recurring, setRecurring] = useState<RecurringTransaction[]>([]);
     const [recurringLoading, setRecurringLoading] = useState(true);
     const [recurringError, setRecurringError] = useState("");
+    const [recurringModalVisible, setRecurringModalVisible] = useState(false);
+    const [recurringModalMode, setRecurringModalMode] = useState<"list" | "create">("list");
 
     async function loadRecurring() {
         setRecurringLoading(true); setRecurringError("");
@@ -49,7 +52,10 @@ export default function DashboardScreen() {
         isMounted.current = false;
     }, []);
 
-    useEffect(() => { void loadRecurring(); }, []);
+    useEffect(() => {
+        const timer = setTimeout(() => { void loadRecurring(); }, 0);
+        return () => clearTimeout(timer);
+    }, []);
 
     async function handleLogout() {
         if (isLoggingOut) return;
@@ -64,6 +70,11 @@ export default function DashboardScreen() {
         } finally {
             if (isMounted.current) setIsLoggingOut(false);
         }
+    }
+
+    function openRecurringModal(mode: "list" | "create") {
+        setRecurringModalMode(mode);
+        setRecurringModalVisible(true);
     }
 
     return (
@@ -133,7 +144,7 @@ export default function DashboardScreen() {
                     {recurringError ? <View><Text style={styles.message}>{recurringError}</Text><Pressable onPress={() => void loadRecurring()}><Text style={styles.linkText}>Retry</Text></Pressable></View> : null}
                     {!recurringLoading && !recurringError && recurring.length === 0 ? <Text style={styles.emptyText}>No recurring transactions yet.</Text> : null}
                     {!recurringLoading && !recurringError && recurring.map((row) => <View key={row.id} style={styles.recurringRow}><View style={styles.recurringInfo}><Text style={styles.recurringName}>{row.name}</Text><Text style={styles.recurringMeta}>{row.frequency} · Next: {row.next_occurrence}</Text></View><Text style={[styles.recurringAmount, row.transaction_type === "income" ? styles.incomeText : styles.expenseText]}>{row.transaction_type === "income" ? "+" : "-"}${(row.amount_minor / 100).toFixed(2)}</Text></View>)}
-                    <View style={styles.recurringActions}><Pressable style={styles.secondaryButton} onPress={() => router.push({ pathname: "/recurring" } as never)}><Text style={styles.secondaryButtonText}>show more</Text></Pressable><Pressable style={styles.primarySmallButton} onPress={() => router.push({ pathname: "/recurring" } as never)}><Text style={styles.primarySmallButtonText}>add recurring transaction</Text></Pressable></View>
+                    <View style={styles.recurringActions}><Pressable style={styles.secondaryButton} onPress={() => openRecurringModal("list")}><Text style={styles.secondaryButtonText}>show more</Text></Pressable><Pressable style={styles.primarySmallButton} onPress={() => openRecurringModal("create")}><Text style={styles.primarySmallButtonText}>add recurring transaction</Text></Pressable></View>
                 </View>
 
                 {message ? <Text style={styles.message}>{message}</Text> : null}
@@ -148,6 +159,12 @@ export default function DashboardScreen() {
                     {isLoggingOut ? <ActivityIndicator color="#b91c1c" /> : <Text style={styles.logoutButtonText}>Log out</Text>}
                 </Pressable>
             </ScrollView>
+            <RecurringTransactionsModal
+                visible={recurringModalVisible}
+                initialMode={recurringModalMode}
+                onClose={() => setRecurringModalVisible(false)}
+                onChanged={() => void loadRecurring()}
+            />
         </SafeAreaView>
     );
 }

@@ -9,13 +9,13 @@ from django.utils import timezone
 from django.db.models import Q, IntegerField, Sum, Value
 from django.db.models.functions import Coalesce
 from rest_framework import permissions, serializers, status, viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 
 from .models import Account, Budget, Category, Goal, RecurringTransaction, Transaction
 from .permissions import IsOwner
 from .serializers import AccountSerializer, BudgetSerializer, CategorySerializer, GoalSerializer, RecurringTransactionSerializer, TransactionSerializer, UserSerializer
-from .services import account_balance_minor, budget_performance_report, budget_spent_minor, budget_spent_minor_for_period, category_report, cash_flow_report, financial_summary, goal_progress, monthly_report
+from .services import account_balance_minor, advance_recurring_transaction, budget_performance_report, budget_spent_minor, budget_spent_minor_for_period, category_report, cash_flow_report, financial_summary, goal_progress, monthly_report
 
 
 class OwnedModelViewSet(viewsets.ModelViewSet):
@@ -149,9 +149,27 @@ class RecurringTransactionViewSet(OwnedModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        if self.request.query_params.get("active") == "true":
+        if self.action != "list":
+            return queryset.order_by("next_occurrence", "name", "id")
+        active_filter = self.request.query_params.get("active", "true").lower()
+        if active_filter == "true":
             queryset = queryset.filter(is_active=True)
+        elif active_filter == "false":
+            queryset = queryset.filter(is_active=False)
+        elif active_filter != "all":
+            raise serializers.ValidationError({"active": "Use true, false, or all."})
         return queryset.order_by("next_occurrence", "name", "id")
+
+    @action(detail=True, methods=["post"])
+    def advance(self, request, pk=None):
+        recurring_transaction = self.get_object()
+        if not recurring_transaction.is_active:
+            return Response({"detail": "Inactive recurring transactions cannot be advanced."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            advance_recurring_transaction(recurring_transaction)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(self.get_serializer(recurring_transaction).data)
 class GoalViewSet(OwnedModelViewSet):
     queryset = Goal.objects.all()
     serializer_class = GoalSerializer
