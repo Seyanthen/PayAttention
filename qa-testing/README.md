@@ -27,6 +27,27 @@ From `mobile-ui/TeamApp/`:
 npx tsc --noEmit
 ```
 
+## Start the phone-accessible local environment
+
+From PowerShell at the repository root, run:
+
+```powershell
+.\qa-testing\start-local.ps1
+```
+
+The script detects the laptop's active LAN or hotspot IPv4 address, updates the
+local ignored `.env` files, and opens Django and Expo in separate windows:
+
+- `mobile-ui/TeamApp/.env` receives the Expo API URL.
+- `backend/.env` receives the matching `DJANGO_ALLOWED_HOSTS` value.
+- Django listens on `0.0.0.0:8000` so a phone can connect.
+- Expo starts from `mobile-ui/TeamApp`.
+
+Run the script again whenever the laptop changes networks. Because Expo embeds
+`EXPO_PUBLIC_*` values when it starts, restarting Expo is required after the
+detected IP changes. The generated `.env` files are intentionally ignored by
+Git; only this script and its documentation are committed.
+
 ## Current implementation status
 
 | Requirement | Current status | Evidence / remaining work |
@@ -63,20 +84,40 @@ The backend tests currently contain 13 API cases covering integer-unit balance c
 
 QA owns the test inventory, execution evidence, regression plan, and defect reports. Backend, database, mobile, and finance leads own the behavior and contracts that QA verifies. Changes to financial rules must update the finance documentation and the corresponding QA cases together.
 
-# Frontend and Backend Commands
-Frontend start command:
-    npx expo start 
+## Frontend and Backend Commands
+To update the IP address for hosting (in powershell):
+      ```
+      powershell.exe -ExecutionPolicy Bypass -File .\qa-testing\start-local.ps1
+      ```
 
-    (Command Prompt terminal in the directory of ...mobile-ui\TeamApp)
-      cd D:\CSE310\PayAttention\mobile-ui\TeamApp
+Frontend start command: 
+    `npx expo start`
 
-Backend start command:
+Must be in Command Prompt terminal in the directory of 
+      `...mobile-ui\TeamApp`
+
+<!-- This is for Josh's Computer:
+cd D:\CSE310\PayAttention\mobile-ui\TeamApp
+
+        
+Backend start commands:
       python manage.py check
       python manage.py test --keepdb --noinput
       python manage.py runserver
+
+ -->
       
 To start in the Vitrual Environment (in powershell terminal in ...\backend)
+      ```   
       .\.venv\Scripts\python.exe manage.py check
+      ```
+      ```
       .\.venv\Scripts\python.exe manage.py test --keepdb --noinput
-      .\.venv\Scripts\python.exe manage.py runserver
+      ```
+      ```  
+      .\.venv\Scripts\python.exe manage.py runserver   
+      ```
+
+
+
     
