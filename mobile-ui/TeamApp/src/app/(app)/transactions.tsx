@@ -73,6 +73,8 @@ export default function TransactionsScreen() {
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isAddVisible, setIsAddVisible] = useState(false);
   const [isImportExportVisible, setIsImportExportVisible] = useState(false);
+  const [importExportStartDate, setImportExportStartDate] = useState('');
+  const [importExportEndDate, setImportExportEndDate] = useState('');
   const [isHistoryVisible, setIsHistoryVisible] = useState(false);
   const [merchant, setMerchant] = useState('');
   const [amount, setAmount] = useState('');
@@ -372,7 +374,16 @@ export default function TransactionsScreen() {
         <View style={styles.modalBackdrop}>
           <View style={styles.choiceModalCard}>
             <View style={styles.modalHeader}><Text style={styles.modalTitle}>Transactions</Text><Pressable accessibilityRole="button" onPress={closeModal}><Text style={styles.closeText}>Close</Text></Pressable></View>
-            <Text style={styles.choiceModalText}>What would you like to do?</Text>
+            <View style={styles.choiceDateColumns}>
+              <View style={styles.filterColumn}>
+                <Text style={styles.inputLabel}>Start date</Text>
+                <TextInput accessibilityLabel="Import and export start date" style={styles.input} value={importExportStartDate} onChangeText={setImportExportStartDate} placeholder="YYYY-MM-DD" />
+              </View>
+              <View style={styles.filterColumn}>
+                <Text style={styles.inputLabel}>End date</Text>
+                <TextInput accessibilityLabel="Import and export end date" style={styles.input} value={importExportEndDate} onChangeText={setImportExportEndDate} placeholder="YYYY-MM-DD" />
+              </View>
+            </View>
             <Pressable accessibilityRole="button" style={styles.primaryButton} onPress={importTransactions}><Text style={styles.primaryButtonText}>Import transactions</Text></Pressable>
             <Pressable accessibilityRole="button" style={styles.secondaryChoiceButton} onPress={() => void exportTransactions()}><Text style={styles.secondaryHeaderButtonText}>Export transactions</Text></Pressable>
           </View>
@@ -410,6 +421,7 @@ const styles = StyleSheet.create({
   retryButtonText: { color: '#b91c1c', fontWeight: '700' },
   choiceModalCard: { backgroundColor: '#fff', borderRadius: 20, padding: 24 },
   choiceModalText: { color: '#475569', fontSize: 16, marginBottom: 4 },
+  choiceDateColumns: { flexDirection: 'row', gap: 10 },
   secondaryChoiceButton: { borderWidth: 1, borderColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 4 },
   buttonDisabled: { opacity: 0.65 },
 });
