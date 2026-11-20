@@ -309,6 +309,12 @@ def cash_flow_report(user, period_start: date, period_end: date) -> dict:
 
 
 def budget_performance_report(user, period_start: date, period_end: date) -> dict:
+    """Return dashboard budget metrics for the requested inclusive period.
+
+    Spending is limited to the overlap between each budget and the requested
+    period. The aggregate totals are calculated from the same per-budget rows
+    returned to the caller so the dashboard values stay consistent.
+    """
     budgets = list(Budget.objects.filter(owner=user, period_start__lte=period_end, period_end__gte=period_start).select_related("category"))
     category_ids = {budget.category_id for budget in budgets}
     spent_rows = Transaction.objects.filter(owner=user, category_id__in=category_ids, transaction_type=Transaction.TransactionType.EXPENSE, occurred_on__gte=period_start, occurred_on__lte=period_end).values("category_id", "occurred_on").annotate(total_minor=Sum("amount_minor")) if category_ids else []
@@ -319,8 +325,41 @@ def budget_performance_report(user, period_start: date, period_end: date) -> dic
         end = min(budget.period_end, period_end)
         spent = sum(amount for (category_id, occurred_on), amount in spent_by_category_date.items() if category_id == budget.category_id and start <= occurred_on <= end)
         limit = budget.amount_minor
-        results.append({"budget_id": budget.id, "name": budget.name, "category_id": budget.category_id, "limit_minor": limit, "spent_minor": spent, "remaining_minor": limit - spent, "percentage_used": float((Decimal(spent * 100) / Decimal(limit)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)), "over_budget": spent > limit})
-    return {"period_start": period_start, "period_end": period_end, "budgets": results}
+        results.append({
+            "budget_id": budget.id,
+            "name": budget.name,
+            "category_id": budget.category_id,
+            "category_name": budget.category.name,
+            "limit_minor": limit,
+            "spent_minor": spent,
+            "remaining_minor": limit - spent,
+            "percentage_used": float((Decimal(spent * 100) / Decimal(limit)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
+            "over_budget": spent > limit,
+        })
+
+    over_budget = [
+        {
+            "budget_id": budget["budget_id"],
+            "category_id": budget["category_id"],
+            "category_name": budget["category_name"],
+            "over_by_minor": budget["spent_minor"] - budget["limit_minor"],
+            "spent_minor": budget["spent_minor"],
+            "limit_minor": budget["limit_minor"],
+            "percentage_used": budget["percentage_used"],
+        }
+        for budget in results
+        if budget["over_budget"]
+    ]
+    return {
+        "period_start": period_start,
+        "period_end": period_end,
+        "total_budget_minor": sum(budget["limit_minor"] for budget in results),
+        "total_spent_minor": sum(budget["spent_minor"] for budget in results),
+        "total_remaining_minor": sum(budget["remaining_minor"] for budget in results),
+        "budgets": results,
+        "over_budget_categories": over_budget,
+        "spending_by_category": category_report(user, period_start, period_end)["categories"],
+    }
 
 
 def goal_progress(goal: Goal) -> dict:
@@ -483,4 +522,3 @@ def import_transactions(user, file_obj):
         "invalid_rows": invalid_rows,
         "duplicate_rows": duplicate_rows,
     }
-    

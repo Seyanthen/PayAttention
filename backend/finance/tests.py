@@ -455,6 +455,38 @@ class FinanceApiTests(APITestCase):
         self.assertEqual(response.data["budgets"][0]["budget_id"], budget.id)
         self.assertEqual(response.data["budgets"][0]["spent_minor"], 1500)
 
+    def test_budget_performance_report_returns_dashboard_totals_and_over_budget_categories(self):
+        budget = Budget.objects.create(
+            owner=self.user,
+            category=self.expense_category,
+            name="Food",
+            amount_minor=5000,
+            period_start=date(2026, 2, 1),
+            period_end=date(2026, 2, 28),
+        )
+        Transaction.objects.create(
+            owner=self.user,
+            account=self.account,
+            category=self.expense_category,
+            transaction_type="expense",
+            amount_minor=6000,
+            occurred_on=date(2026, 2, 15),
+        )
+
+        response = self.client.get(reverse("budget-performance-report"), {"start": "2026-02-01", "end": "2026-02-28"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["total_budget_minor"], 5000)
+        self.assertEqual(response.data["total_spent_minor"], 6000)
+        self.assertEqual(response.data["total_remaining_minor"], -1000)
+        self.assertEqual(response.data["budgets"][0]["category_name"], "Food")
+        self.assertEqual(response.data["budgets"][0]["percentage_used"], 120.0)
+        self.assertTrue(response.data["budgets"][0]["over_budget"])
+        self.assertEqual(response.data["over_budget_categories"][0]["budget_id"], budget.id)
+        self.assertEqual(response.data["over_budget_categories"][0]["over_by_minor"], 1000)
+        self.assertEqual(response.data["spending_by_category"][0]["category_name"], "Food")
+        self.assertEqual(response.data["spending_by_category"][0]["total_minor"], 6000)
+
     def test_goals_are_owner_scoped_and_progress_is_aggregated(self):
         goal = Goal.objects.create(owner=self.user, name="Emergency fund", target_amount_minor=10000, target_date=date(2027, 6, 1))
         GoalContribution.objects.create(goal=goal, amount_minor=3500, contributed_on=date(2026, 1, 1))
