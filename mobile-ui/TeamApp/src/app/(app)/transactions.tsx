@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { SymbolView } from 'expo-symbols';
 import {
   Keyboard,
@@ -18,19 +18,10 @@ import {
 } from 'react-native';
 import { authenticatedGet, getApiErrorMessage } from '@/services/api';
 import { parseDollarAmountToMinorUnits, validateTransaction, validateTransactionFilters, type ValidationErrors } from '@/services/validation';
-
-type TransactionKind = 'expense' | 'income' | 'transfer';
-
-type Transaction = {
-  id: number;
-  merchant: string;
-  amount: number;
-  category: string;
-  account: string;
-  date: string;
-  notes: string;
-  kind: TransactionKind;
-};
+import { addGoalContribution, getGoals, subscribeToGoals } from '@/services/goal-store';
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/services/transaction-categories';
+import { addLocalTransaction, getLocalTransactions } from '@/services/transaction-store';
+import type { Transaction, TransactionKind } from '@/services/transaction-types';
 
 type ApiTransaction = {
   id: number;
@@ -41,6 +32,7 @@ type ApiTransaction = {
   occurred_on: string;
   merchant: string;
   note: string;
+  created_at?: string;
 };
 
 type Lookup = { id: number; name: string; category_type?: 'expense' | 'income' };
@@ -58,10 +50,9 @@ type TransactionFilters = {
 
 const initialTransactions: Transaction[] = [];
 
-const categories = ['Food', 'Groceries', 'Transportation', 'Bills', 'Entertainment', 'Shopping', 'Income', 'Other'];
-
 export default function TransactionsScreen() {
   const isMounted = useRef(true);
+  const goals = useSyncExternalStore(subscribeToGoals, getGoals, getGoals);
   const [transactions, setTransactions] = useState(initialTransactions);
   const [accounts, setAccounts] = useState<Lookup[]>([]);
   const [lookupCategories, setLookupCategories] = useState<Lookup[]>([]);
@@ -96,8 +87,10 @@ export default function TransactionsScreen() {
       merchant: row.merchant || 'Untitled transaction',
       amount: row.amount_minor,
       category: categoryRows.find((item) => item.id === row.category)?.name ?? 'Uncategorized',
+      categoryId: row.category === null ? undefined : String(row.category),
       account: accountRows.find((item) => item.id === row.account)?.name ?? `Account ${row.account}`,
       date: row.occurred_on,
+      timestamp: row.created_at ?? row.occurred_on,
       notes: row.note,
       kind: row.transaction_type,
     };
@@ -107,8 +100,8 @@ export default function TransactionsScreen() {
     const query = new URLSearchParams();
     if (nextFilters.search.trim()) query.set('search', nextFilters.search.trim());
     if (nextFilters.account) query.set('account', nextFilters.account);
-    if (nextFilters.category) query.set('category', nextFilters.category);
-    if (nextFilters.transactionType) query.set('transaction_type', nextFilters.transactionType);
+    if (nextFilters.category && nextFilters.transactionType !== 'goal' && /^\d+$/.test(nextFilters.category)) query.set('category', nextFilters.category);
+    if (nextFilters.transactionType && nextFilters.transactionType !== 'goal') query.set('transaction_type', nextFilters.transactionType);
     if (nextFilters.startDate.trim()) query.set('start_date', nextFilters.startDate.trim());
     if (nextFilters.endDate.trim()) query.set('end_date', nextFilters.endDate.trim());
     const minAmount = parseDollarAmountToMinorUnits(nextFilters.minAmountDollars, true);
@@ -142,7 +135,14 @@ export default function TransactionsScreen() {
       const typedCategories = categoryRows as Lookup[];
       setAccounts(typedAccounts);
       setLookupCategories(typedCategories);
-      setTransactions((transactionRows as ApiTransaction[]).map((row) => transactionFromApi(row, typedAccounts, typedCategories)));
+      const serverTransactions = (transactionRows as ApiTransaction[]).map((row) => transactionFromApi(row, typedAccounts, typedCategories));
+      setTransactions((current) => {
+        const matchingLocalTransactions = getLocalTransactions().filter((transaction) => matchesFilters(transaction, nextFilters));
+        const merged = sortTransactions([...serverTransactions, ...matchingLocalTransactions]);
+        if (nextFilters.transactionType === 'goal' || (nextFilters.category && !/^\d+$/.test(nextFilters.category))) return merged.filter((transaction) => matchesFilters(transaction, nextFilters));
+        if (nextFilters.transactionType) return sortTransactions(serverTransactions);
+        return merged;
+      });
     } catch (error) {
       if (isMounted.current) setLoadError(getApiErrorMessage(error, 'Unable to load transactions. Please try again.'));
     } finally {
@@ -184,6 +184,12 @@ export default function TransactionsScreen() {
     { income: 0, expenses: 0 },
   ), [transactions]);
 
+  const addCategoryOptions = useMemo(() => {
+    if (kind === 'goal') return goals.map((goal) => ({ id: goal.id, name: goal.name }));
+    const categoriesForType = kind === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+    return categoriesForType.map((name) => ({ id: name, name }));
+  }, [goals, kind]);
+
   const openAdd = () => {
     setMerchant(''); setAmount(''); setCategory('Other'); setAccount('Checking Account'); setKind('expense'); setDate(formatToday()); setNotes(''); setTransferAccount(''); setFieldErrors({}); setIsAddVisible(true);
   };
@@ -212,7 +218,17 @@ export default function TransactionsScreen() {
     }
     const amountMinor = parseDollarAmountToMinorUnits(amount);
     if (amountMinor === undefined) return;
-    setTransactions((current) => [{ id: Date.now(), merchant: merchant.trim(), amount: amountMinor, category, account, date: date.trim(), notes: notes.trim(), kind }, ...current]);
+    if (kind === 'goal') {
+      const goal = goals.find((item) => item.id === category);
+      if (!goal) {
+        setFieldErrors({ category: 'Select a savings goal.' });
+        return;
+      }
+      addGoalContribution(goal.id, amountMinor);
+    }
+    const newTransaction: Transaction = { id: Date.now(), merchant: merchant.trim(), amount: amountMinor, category: kind === 'goal' ? goals.find((item) => item.id === category)?.name ?? category : category, categoryId: kind === 'goal' ? category : undefined, account, date: date.trim(), timestamp: new Date().toISOString(), notes: notes.trim(), kind };
+    addLocalTransaction(newTransaction);
+    setTransactions((current) => sortTransactions([newTransaction, ...current]));
     closeModal();
   };
 
@@ -274,18 +290,18 @@ export default function TransactionsScreen() {
             onChangeText={(value) => setFilters((current) => ({ ...current, search: value }))}
             placeholder="Search merchant or note"
           />
+          <Text style={styles.inputLabel}>Type</Text>
+          <View style={styles.optionRow}>{(['', 'expense', 'income', 'transfer', 'goal'] as const).map((option) => <Pressable key={option || 'all'} style={[styles.optionButton, filters.transactionType === option && styles.selectedOption]} onPress={() => setFilters((current) => ({ ...current, transactionType: option, category: '' }))}><Text style={styles.optionText}>{option ? option[0].toUpperCase() + option.slice(1) : 'All'}</Text></Pressable>)}</View>
+          <Text style={styles.inputLabel}>Category</Text>
+          <View style={styles.optionRow}>
+            <Pressable style={[styles.optionButton, !filters.category && styles.selectedOption]} onPress={() => setFilters((current) => ({ ...current, category: '' }))}><Text style={styles.optionText}>All</Text></Pressable>
+            {(filters.transactionType === 'goal' ? goals.map((goal) => ({ id: goal.id, name: goal.name })) : [...lookupCategories, ...EXPENSE_CATEGORIES.map((name) => ({ id: name, name }))].filter((option, index, options) => options.findIndex((candidate) => candidate.name.toLowerCase() === option.name.toLowerCase()) === index)).map((option) => <Pressable key={option.id} style={[styles.optionButton, filters.category === String(option.id) && styles.selectedOption]} onPress={() => setFilters((current) => ({ ...current, category: String(option.id) }))}><Text style={styles.optionText}>{option.name}</Text></Pressable>)}
+          </View>
           <Text style={styles.inputLabel}>Account</Text>
           <View style={styles.optionRow}>
             <Pressable style={[styles.optionButton, !filters.account && styles.selectedOption]} onPress={() => setFilters((current) => ({ ...current, account: '' }))}><Text style={styles.optionText}>All</Text></Pressable>
             {accounts.map((option) => <Pressable key={option.id} style={[styles.optionButton, filters.account === String(option.id) && styles.selectedOption]} onPress={() => setFilters((current) => ({ ...current, account: String(option.id) }))}><Text style={styles.optionText}>{option.name}</Text></Pressable>)}
           </View>
-          <Text style={styles.inputLabel}>Category</Text>
-          <View style={styles.optionRow}>
-            <Pressable style={[styles.optionButton, !filters.category && styles.selectedOption]} onPress={() => setFilters((current) => ({ ...current, category: '' }))}><Text style={styles.optionText}>All</Text></Pressable>
-            {lookupCategories.map((option) => <Pressable key={option.id} style={[styles.optionButton, filters.category === String(option.id) && styles.selectedOption]} onPress={() => setFilters((current) => ({ ...current, category: String(option.id) }))}><Text style={styles.optionText}>{option.name}</Text></Pressable>)}
-          </View>
-          <Text style={styles.inputLabel}>Type</Text>
-          <View style={styles.optionRow}>{(['', 'expense', 'income', 'transfer'] as const).map((option) => <Pressable key={option || 'all'} style={[styles.optionButton, filters.transactionType === option && styles.selectedOption]} onPress={() => setFilters((current) => ({ ...current, transactionType: option }))}><Text style={styles.optionText}>{option ? option[0].toUpperCase() + option.slice(1) : 'All'}</Text></Pressable>)}</View>
           <View style={styles.filterColumns}>
             <View style={styles.filterColumn}><Text style={styles.inputLabel}>Start date</Text><TextInput style={styles.input} value={filters.startDate} onChangeText={(value) => { setFilters((current) => ({ ...current, startDate: value })); setFilterErrors((current) => ({ ...current, startDate: undefined })); }} placeholder="YYYY-MM-DD" />{filterErrors.startDate ? <Text style={styles.fieldError}>{filterErrors.startDate}</Text> : null}</View>
             <View style={styles.filterColumn}><Text style={styles.inputLabel}>End date</Text><TextInput style={styles.input} value={filters.endDate} onChangeText={(value) => { setFilters((current) => ({ ...current, endDate: value })); setFilterErrors((current) => ({ ...current, endDate: undefined })); }} placeholder="YYYY-MM-DD" />{filterErrors.endDate ? <Text style={styles.fieldError}>{filterErrors.endDate}</Text> : null}</View>
@@ -337,7 +353,7 @@ export default function TransactionsScreen() {
                   contentContainerStyle={styles.detailsContent}
                   showsVerticalScrollIndicator={false}>
                   <View style={styles.detailHero}><Text style={styles.detailMerchant}>{selectedTransaction.merchant}</Text><Text style={[styles.detailAmount, selectedTransaction.kind === 'income' && styles.incomeText]}>{selectedTransaction.kind === 'income' ? '+' : '-'}{formatCurrency(selectedTransaction.amount)}</Text></View>
-                  <DetailRow label="Category" value={selectedTransaction.category} /><DetailRow label="Account" value={selectedTransaction.account} /><DetailRow label="Date" value={selectedTransaction.date} /><DetailRow label="Type" value={selectedTransaction.kind === 'income' ? 'Income' : 'Expense'} />
+                  <DetailRow label="Category" value={selectedTransaction.category} /><DetailRow label="Account" value={selectedTransaction.account} /><DetailRow label="Date" value={selectedTransaction.date} /><DetailRow label="Type" value={selectedTransaction.kind[0].toUpperCase() + selectedTransaction.kind.slice(1)} />
                   {selectedTransaction.notes ? <DetailRow label="Notes" value={selectedTransaction.notes} /> : null}
                 </ScrollView>
               ) : isHistoryVisible ? (
@@ -357,9 +373,9 @@ export default function TransactionsScreen() {
                   <Text style={styles.inputLabel}>Amount in US dollars</Text><TextInput style={styles.input} value={amount} onChangeText={(value) => { setAmount(value); setFieldErrors((current) => ({ ...current, amountMinor: undefined })); }} placeholder="$0.00" keyboardType="decimal-pad" />{fieldErrors.amountMinor ? <Text style={styles.fieldError}>{fieldErrors.amountMinor}</Text> : null}
                   <Text style={styles.inputLabel}>Date</Text><TextInput style={styles.input} value={date} onChangeText={(value) => { setDate(value); setFieldErrors((current) => ({ ...current, occurredOn: undefined })); }} placeholder="YYYY-MM-DD" />{fieldErrors.occurredOn ? <Text style={styles.fieldError}>{fieldErrors.occurredOn}</Text> : null}
                   <Text style={styles.inputLabel}>Type</Text>
-                  <View style={styles.optionRow}>{(['expense', 'income', 'transfer'] as TransactionKind[]).map((option) => <Pressable key={option} style={[styles.optionButton, kind === option && styles.selectedOption]} onPress={() => { setKind(option); setFieldErrors((current) => ({ ...current, category: undefined, transferAccount: undefined })); }}><Text style={[styles.optionText, kind === option && styles.selectedOptionText]}>{option[0].toUpperCase() + option.slice(1)}</Text></Pressable>)}</View>
-                  {kind !== 'transfer' ? <><Text style={styles.inputLabel}>Category</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>{categories.filter((option) => kind === 'income' ? option === 'Income' : option !== 'Income').map((option) => <Pressable key={option} style={[styles.categoryButton, category === option && styles.selectedOption]} onPress={() => { setCategory(option); setFieldErrors((current) => ({ ...current, category: undefined })); }}><Text style={[styles.optionText, category === option && styles.selectedOptionText]}>{option}</Text></Pressable>)}</ScrollView>{fieldErrors.category ? <Text style={styles.fieldError}>{fieldErrors.category}</Text> : null}</> : <><Text style={styles.inputLabel}>Destination account</Text><View style={styles.optionRow}>{['Checking Account', 'Savings Account', 'Credit Card'].filter((option) => option !== account).map((option) => <Pressable key={option} style={[styles.accountButton, transferAccount === option && styles.selectedOption]} onPress={() => { setTransferAccount(option); setFieldErrors((current) => ({ ...current, transferAccount: undefined })); }}><Text style={[styles.optionText, transferAccount === option && styles.selectedOptionText]}>{option.replace(' Account', '')}</Text></Pressable>)}</View>{fieldErrors.transferAccount ? <Text style={styles.fieldError}>{fieldErrors.transferAccount}</Text> : null}</>}
+                  <View style={styles.optionRow}>{(['expense', 'income', 'transfer', 'goal'] as TransactionKind[]).map((option) => <Pressable key={option} style={[styles.optionButton, kind === option && styles.selectedOption]} onPress={() => { setKind(option); setCategory(option === 'goal' ? '' : option === 'income' ? 'Income' : 'Other'); setFieldErrors((current) => ({ ...current, category: undefined, transferAccount: undefined })); }}><Text style={[styles.optionText, kind === option && styles.selectedOptionText]}>{option[0].toUpperCase() + option.slice(1)}</Text></Pressable>)}</View>
+                  {kind !== 'transfer' ? <><Text style={styles.inputLabel}>{kind === 'goal' ? 'Savings goal' : 'Category'}</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>{addCategoryOptions.map((option) => <Pressable key={option.id} style={[styles.categoryButton, category === option.id && styles.selectedOption]} onPress={() => { setCategory(option.id); setFieldErrors((current) => ({ ...current, category: undefined })); }}><Text style={[styles.optionText, category === option.id && styles.selectedOptionText]}>{option.name}</Text></Pressable>)}</ScrollView>{fieldErrors.category ? <Text style={styles.fieldError}>{fieldErrors.category}</Text> : null}</> : <><Text style={styles.inputLabel}>Destination account</Text><View style={styles.optionRow}>{['Checking Account', 'Savings Account', 'Credit Card'].filter((option) => option !== account).map((option) => <Pressable key={option} style={[styles.accountButton, transferAccount === option && styles.selectedOption]} onPress={() => { setTransferAccount(option); setFieldErrors((current) => ({ ...current, transferAccount: undefined })); }}><Text style={[styles.optionText, transferAccount === option && styles.selectedOptionText]}>{option.replace(' Account', '')}</Text></Pressable>)}</View>{fieldErrors.transferAccount ? <Text style={styles.fieldError}>{fieldErrors.transferAccount}</Text> : null}</>}
                   <Text style={styles.inputLabel}>Account</Text>
                   <View style={styles.optionRow}>{['Checking Account', 'Savings Account', 'Credit Card'].map((option) => <Pressable key={option} style={[styles.accountButton, account === option && styles.selectedOption]} onPress={() => setAccount(option)}><Text style={[styles.optionText, account === option && styles.selectedOptionText]}>{option.replace(' Account', '')}</Text></Pressable>)}</View>
                   <Text style={styles.inputLabel}>Notes (optional)</Text><TextInput style={[styles.input, styles.notesInput]} value={notes} onChangeText={setNotes} placeholder="Add a note" multiline />
@@ -399,6 +415,25 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 function formatCurrency(value: number) { return `$${(Math.abs(value) / 100).toFixed(2)}`; }
 function formatToday() { return new Date().toISOString().slice(0, 10); }
+function sortTransactions(items: Transaction[]) {
+  return [...items].sort((a, b) => b.date.localeCompare(a.date) || (b.timestamp ?? '').localeCompare(a.timestamp ?? '') || b.id - a.id);
+}
+
+function matchesFilters(transaction: Transaction, filters: TransactionFilters) {
+  if (filters.transactionType && transaction.kind !== filters.transactionType) return false;
+  if (filters.category && transaction.categoryId !== filters.category && transaction.category.toLowerCase() !== filters.category.toLowerCase()) return false;
+  if (filters.search.trim()) {
+    const search = filters.search.trim().toLowerCase();
+    if (![transaction.merchant, transaction.category, transaction.notes].some((value) => value.toLowerCase().includes(search))) return false;
+  }
+  if (filters.startDate && transaction.date < filters.startDate) return false;
+  if (filters.endDate && transaction.date > filters.endDate) return false;
+  const minAmount = parseDollarAmountToMinorUnits(filters.minAmountDollars, true);
+  const maxAmount = parseDollarAmountToMinorUnits(filters.maxAmountDollars, true);
+  if (minAmount !== undefined && transaction.amount < minAmount) return false;
+  if (maxAmount !== undefined && transaction.amount > maxAmount) return false;
+  return true;
+}
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#f8fafc' }, container: { padding: 24, paddingBottom: 48 }, header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }, title: { fontSize: 32, fontWeight: 'bold', color: '#0f172a' }, subtitle: { marginTop: 4, color: '#64748b' }, headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 12 }, secondaryHeaderButton: { borderWidth: 1, borderColor: '#2563eb', paddingHorizontal: 11, paddingVertical: 10, borderRadius: 8, alignItems: 'center' }, secondaryHeaderButtonText: { color: '#2563eb', fontWeight: '700' }, addButton: { backgroundColor: '#2563eb', paddingHorizontal: 12, paddingVertical: 11, borderRadius: 8, alignItems: 'center' }, addButtonText: { color: '#fff', fontWeight: 'bold' },
