@@ -6,7 +6,9 @@ from django.db.models import Q, Sum, Value, IntegerField
 from django.db.models.functions import Coalesce, TruncMonth
 
 from .models import Account, Budget, Goal, RecurringTransaction, Transaction
-
+import csv
+import io
+from django.db import transaction as db_transaction
 
 def next_recurring_date(current: date, frequency: str) -> date:
     """Return the next UTC calendar date for a recurring schedule.
@@ -329,3 +331,156 @@ def goal_progress(goal: Goal) -> dict:
     target = goal.target_amount_minor
     return {"current_amount_minor": current, "remaining_amount_minor": max(target - current, 0), "progress_percent": float((Decimal(current * 100) / Decimal(target)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))}
 
+# IMPORTING TRANSACTION (validate transaction rows from the csv file)
+def import_transactions(user, file_obj):
+    """
+    Import transactions from a CSV file.
+
+    The CSV must contain:
+    occurred_on, account, transaction_type,
+    amount_minor, merchant, note
+    """
+
+    file_content = file_obj.read()
+
+    if isinstance(file_content, bytes):
+        file_content = file_content.decode("utf-8-sig")
+    else:
+        file_content = file_content.lstrip("\ufeff")
+
+    reader = csv.DictReader(io.StringIO(file_content))
+
+    required_columns = {
+        "occurred_on",
+        "account",
+        "transaction_type",
+        "amount_minor",
+        "merchant",
+        "note",
+    }
+
+    actual_columns = set(reader.fieldnames or [])
+    missing_columns = required_columns - actual_columns
+
+    if missing_columns:
+        raise ValueError(
+            f"Missing CSV columns: {', '.join(sorted(missing_columns))}"
+        )
+
+    valid_rows = []
+    invalid_rows = []
+    duplicate_rows = []
+    seen_transactions = set()
+
+    valid_transaction_types = {
+        choice for choice, _ in Transaction.TransactionType.choices
+    }
+
+    for row_number, row in enumerate(reader, start=2):
+        occurred_on_text = (row.get("occurred_on") or "").strip()
+        account_name = (row.get("account") or "").strip()
+        transaction_type = (row.get("transaction_type") or "").strip().lower()
+        amount_text = (row.get("amount_minor") or "").strip()
+        merchant = (row.get("merchant") or "").strip()
+        note = (row.get("note") or "").strip()
+
+        errors = []
+
+        if not occurred_on_text:
+            errors.append("occurred_on is required")
+        else:
+            try:
+                occurred_on = date.fromisoformat(occurred_on_text)
+            except ValueError:
+                errors.append("occurred_on must use YYYY-MM-DD format")
+                occurred_on = None
+
+        if not account_name:
+            errors.append("account is required")
+
+        if transaction_type not in valid_transaction_types:
+            errors.append(
+                "transaction_type must be income, expense, or transfer"
+            )
+
+        if not amount_text.isdigit() or int(amount_text) <= 0:
+            errors.append("amount_minor must be a positive integer")
+            amount_minor = None
+        else:
+            amount_minor = int(amount_text)
+
+        if errors:
+            invalid_rows.append({
+                "row": row_number,
+                "errors": errors,
+            })
+            continue
+
+        account = Account.objects.filter(
+            owner=user,
+            name=account_name,
+        ).first()
+
+        if account is None:
+            invalid_rows.append({
+                "row": row_number,
+                "errors": [
+                    f"Account '{account_name}' does not exist for this user"
+                ],
+            })
+            continue
+
+        duplicate_key = (
+            account.id,
+            transaction_type,
+            amount_minor,
+            occurred_on,
+            merchant,
+            note,
+        )
+
+        duplicate_exists = Transaction.objects.filter(
+            owner=user,
+            account=account,
+            transaction_type=transaction_type,
+            amount_minor=amount_minor,
+            occurred_on=occurred_on,
+            merchant=merchant,
+            note=note,
+        ).exists()
+
+        if duplicate_key in seen_transactions or duplicate_exists:
+            duplicate_rows.append({
+                "row": row_number,
+                "reason": "Duplicate transaction",
+            })
+            continue
+
+        seen_transactions.add(duplicate_key)
+
+        valid_rows.append(
+            Transaction(
+                owner=user,
+                account=account,
+                transaction_type=transaction_type,
+                amount_minor=amount_minor,
+                occurred_on=occurred_on,
+                merchant=merchant,
+                note=note,
+            )
+        )
+
+    with db_transaction.atomic():
+        Transaction.objects.bulk_create(valid_rows)
+
+    return {
+        "total_rows": len(valid_rows)
+        + len(invalid_rows)
+        + len(duplicate_rows),
+        "inserted": len(valid_rows),
+        "invalid": len(invalid_rows),
+        "duplicates": len(duplicate_rows),
+        "invalid_rows": invalid_rows,
+        "duplicate_rows": duplicate_rows,
+    }
+    

@@ -90,7 +90,7 @@ export function validateTransactionFilters(input: {
   if (!errors.minAmountDollars && !errors.maxAmountDollars && minAmount !== undefined && maxAmount !== undefined && minAmount > maxAmount) {
     errors.maxAmountDollars = "Maximum amount must be greater than or equal to minimum amount.";
   }
-  if (input.transactionType && !["expense", "income", "transfer"].includes(input.transactionType)) {
+  if (input.transactionType && !["expense", "income", "transfer", "goal"].includes(input.transactionType)) {
     errors.transactionType = "Select a valid transaction type.";
   }
   return errors;
@@ -110,7 +110,7 @@ export type TransactionValidationInput = {
   merchant: string;
   amountDollars: string;
   date: string;
-  transactionType: "expense" | "income" | "transfer";
+  transactionType: "expense" | "income" | "transfer" | "goal";
   categoryType?: "expense" | "income";
   account: string;
   transferAccount?: string;

@@ -20,6 +20,7 @@ from .views import (
     me,
     summary,
     export_transactions,
+    import_transactions_view
 )
 
 router = DefaultRouter()
@@ -44,10 +45,18 @@ urlpatterns = [
     # Accept malformed named months so the view can return a useful 400,
     # while excluding numeric IDs used by the router's budget detail route.
     re_path(r"^budgets/(?P<month>\d{4}-\d{2}|[A-Za-z][A-Za-z0-9-]*)/$", budgets_for_month, name="budgets-for-month"),
+    
+    # endpoints for exporting and importing csv for transactions summary
     path(
     "transactions/export/",
     export_transactions,
     name="transaction-export",
+),
+    
+    path(
+    "transactions/import/",
+    import_transactions_view,
+    name="transaction-import",
 ),
     path("", include(router.urls)),
 ]

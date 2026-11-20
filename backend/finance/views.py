@@ -10,13 +10,15 @@ from django.db import connection
 from django.db.models import Q, IntegerField, Sum, Value
 from django.db.models.functions import Coalesce
 from rest_framework import permissions, serializers, status, viewsets
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes, parser_classes
 from rest_framework.response import Response
+from rest_framework.parsers import FormParser, MultiPartParser
 
 from .models import Account, Budget, Category, Goal, RecurringTransaction, Transaction
 from .permissions import IsOwner
 from .serializers import AccountSerializer, BudgetSerializer, CategorySerializer, GoalSerializer, RecurringTransactionSerializer, TransactionSerializer, UserSerializer
-from .services import account_balance_minor, advance_recurring_transaction, budget_performance_report, budget_spent_minor, budget_spent_minor_for_period, category_report, cash_flow_report, financial_summary, goal_progress, monthly_report
+from .services import account_balance_minor, advance_recurring_transaction, budget_performance_report, budget_spent_minor, budget_spent_minor_for_period, category_report, \
+        cash_flow_report, financial_summary, goal_progress, monthly_report, import_transactions as import_transactions_service
 
 
 class OwnedModelViewSet(viewsets.ModelViewSet):
@@ -362,6 +364,37 @@ def export_transactions(request):
         ])
 
     return response
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
+def import_transactions_view(request):
+    uploaded_file = request.FILES.get("file")
+
+    if uploaded_file is None:
+        return Response(
+            {"detail": "Upload a CSV file using the 'file' field."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        result = import_transactions_service(
+            request.user,
+            uploaded_file,
+        )
+    except UnicodeDecodeError:
+        return Response(
+            {"detail": "The CSV file must use UTF-8 encoding."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    except ValueError as exc:
+        return Response(
+            {"detail": str(exc)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return Response(result, status=status.HTTP_200_OK)
+
 def _report_dates(request):
     try:
         start_value = request.query_params["start"]
