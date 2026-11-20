@@ -9,3 +9,7 @@ export function getLocalTransactions(): Transaction[] {
 export function addLocalTransaction(transaction: Transaction) {
   localTransactions = [transaction, ...localTransactions];
 }
+
+export function removeLocalTransaction(id: number) {
+  localTransactions = localTransactions.filter((transaction) => transaction.id !== id);
+}

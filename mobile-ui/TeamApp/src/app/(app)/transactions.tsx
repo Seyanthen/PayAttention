@@ -16,11 +16,11 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { authenticatedGet, getApiErrorMessage } from '@/services/api';
+import { authenticatedFetch, authenticatedGet, getApiErrorMessage } from '@/services/api';
 import { parseDollarAmountToMinorUnits, validateTransaction, validateTransactionFilters, type ValidationErrors } from '@/services/validation';
 import { addGoalContribution, getGoals, subscribeToGoals } from '@/services/goal-store';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/services/transaction-categories';
-import { addLocalTransaction, getLocalTransactions } from '@/services/transaction-store';
+import { addLocalTransaction, getLocalTransactions, removeLocalTransaction } from '@/services/transaction-store';
 import type { Transaction, TransactionKind } from '@/services/transaction-types';
 
 type ApiTransaction = {
@@ -232,6 +232,33 @@ export default function TransactionsScreen() {
     closeModal();
   };
 
+  const deleteSelectedTransaction = () => {
+    if (!selectedTransaction) return;
+    const transaction = selectedTransaction;
+    Alert.alert('Delete transaction?', `Delete “${transaction.merchant}” from your transactions?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => void performDelete(transaction) },
+    ]);
+  };
+
+  const performDelete = async (transaction: Transaction) => {
+    try {
+      const isLocal = getLocalTransactions().some((item) => item.id === transaction.id);
+      if (isLocal) {
+        removeLocalTransaction(transaction.id);
+        if (transaction.kind === 'goal' && transaction.categoryId) {
+          addGoalContribution(transaction.categoryId, -transaction.amount);
+        }
+      } else {
+        await authenticatedFetch(`/transactions/${transaction.id}/`, { method: 'DELETE' });
+      }
+      setTransactions((current) => current.filter((item) => item.id !== transaction.id));
+      closeModal();
+    } catch (error) {
+      Alert.alert('Delete transaction', getApiErrorMessage(error, 'Unable to delete this transaction. Please try again.'));
+    }
+  };
+
   const importTransactions = () => {
     setIsImportExportVisible(false);
     Alert.alert('Import transactions', 'Transaction import is not available yet.');
@@ -355,16 +382,17 @@ export default function TransactionsScreen() {
                   <View style={styles.detailHero}><Text style={styles.detailMerchant}>{selectedTransaction.merchant}</Text><Text style={[styles.detailAmount, selectedTransaction.kind === 'income' && styles.incomeText]}>{selectedTransaction.kind === 'income' ? '+' : '-'}{formatCurrency(selectedTransaction.amount)}</Text></View>
                   <DetailRow label="Category" value={selectedTransaction.category} /><DetailRow label="Account" value={selectedTransaction.account} /><DetailRow label="Date" value={selectedTransaction.date} /><DetailRow label="Type" value={selectedTransaction.kind[0].toUpperCase() + selectedTransaction.kind.slice(1)} />
                   {selectedTransaction.notes ? <DetailRow label="Notes" value={selectedTransaction.notes} /> : null}
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Delete ${selectedTransaction.merchant}`} style={styles.deleteTransactionButton} onPress={deleteSelectedTransaction}><Text style={styles.deleteTransactionText}>Delete transaction</Text></Pressable>
                 </ScrollView>
               ) : isHistoryVisible ? (
                 <ScrollView style={styles.historyScrollView} contentContainerStyle={styles.historyContent} showsVerticalScrollIndicator={false}>
                   <View style={styles.historyTableHeader}><Text style={[styles.historyHeaderText, styles.historyDateColumn]}>Date</Text><Text style={[styles.historyHeaderText, styles.historyTitleColumn]}>Transaction</Text><Text style={[styles.historyHeaderText, styles.historyAmountColumn]}>Amount</Text></View>
                   {transactions.map((transaction) => (
-                    <View key={transaction.id} style={styles.historyTableRow}>
+                    <Pressable key={transaction.id} accessibilityRole="button" accessibilityLabel={`View ${transaction.merchant}`} style={({ pressed }) => [styles.historyTableRow, pressed && styles.pressed]} onPress={() => setSelectedTransaction(transaction)}>
                       <Text style={[styles.historyDate, styles.historyDateColumn]} numberOfLines={1}>{transaction.date}</Text>
                       <Text style={styles.historyTitle} numberOfLines={1}>{transaction.merchant}</Text>
                       <Text style={[styles.historyAmount, styles.historyAmountColumn, transaction.kind === 'income' && styles.incomeText]}>{transaction.kind === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}</Text>
-                    </View>
+                    </Pressable>
                   ))}
                 </ScrollView>
               ) : (
@@ -441,6 +469,7 @@ const styles = StyleSheet.create({
   modalBackdrop: { flex: 1, justifyContent: 'center', paddingHorizontal: 16, backgroundColor: 'rgba(15, 23, 42, 0.45)' }, keyboardContainer: { width: '100%' }, modalCard: { backgroundColor: '#fff', borderRadius: 20, padding: 24, maxHeight: '90%', minHeight: 373 }, modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }, modalTitle: { fontSize: 24, fontWeight: 'bold', color: '#0f172a' }, closeText: { color: '#2563eb', fontWeight: '600' }, detailsScrollView: { flexGrow: 0 }, detailsContent: { paddingBottom: 12 }, historyScrollView: { flexGrow: 0 }, historyContent: { paddingBottom: 12 }, historyTableHeader: { flexDirection: 'row', alignItems: 'center', paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#cbd5e1' }, historyHeaderText: { color: '#64748b', fontSize: 12, fontWeight: '700', textTransform: 'uppercase' }, historyTableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }, historyDateColumn: { width: 82 }, historyTitleColumn: { flex: 1, marginRight: 16 }, historyDate: { color: '#64748b', fontSize: 12 }, historyTitle: { color: '#0f172a', fontWeight: '600', flex: 1, marginRight: 16 }, historyAmountColumn: { width: 78, textAlign: 'right' }, historyAmount: { color: '#dc2626', fontWeight: '700' }, detailHero: { backgroundColor: '#f8fafc', borderRadius: 12, padding: 18, marginBottom: 12 }, detailMerchant: { color: '#0f172a', fontSize: 20, fontWeight: 'bold', marginBottom: 8 }, detailAmount: { color: '#dc2626', fontSize: 28, fontWeight: 'bold' }, detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }, detailLabel: { color: '#64748b' }, detailValue: { color: '#0f172a', fontWeight: '600', maxWidth: '60%', textAlign: 'right' },
   inputLabel: { color: '#334155', fontWeight: '600', marginBottom: 6, marginTop: 12 }, input: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, padding: 12, color: '#0f172a', backgroundColor: '#fff' }, notesInput: { minHeight: 76, textAlignVertical: 'top' }, optionRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' }, categoryRow: { gap: 8, paddingVertical: 2 }, optionButton: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingVertical: 9, paddingHorizontal: 12 }, categoryButton: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 16, paddingVertical: 8, paddingHorizontal: 12 }, accountButton: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingVertical: 9, paddingHorizontal: 12 }, selectedOption: { backgroundColor: '#dbeafe', borderColor: '#2563eb' }, optionText: { color: '#475569' }, selectedOptionText: { color: '#1d4ed8', fontWeight: '600' }, primaryButton: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 24, marginBottom: 12 }, primaryButtonText: { color: '#fff', fontWeight: 'bold' },
   fieldError: { color: '#b91c1c', marginTop: 4 },
+  deleteTransactionButton: { borderWidth: 1, borderColor: '#dc2626', borderRadius: 8, padding: 13, alignItems: 'center', marginTop: 20 }, deleteTransactionText: { color: '#dc2626', fontWeight: '700' },
   filterCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: '#e2e8f0' },
   filterTitle: { color: '#0f172a', fontSize: 18, fontWeight: '700', marginBottom: 4 },
   filterColumns: { flexDirection: 'row', gap: 10 },
