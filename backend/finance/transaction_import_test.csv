@@ -1,0 +1,7 @@
+occurred_on,account,transaction_type,amount_minor,merchant,note
+2026-11-01,Checking,expense,450,Campus Cafe,Lunch
+2026-11-02,Savings,income,150000,Part-time Job,Paycheck
+,Checking,expense,1200,Grocery Store,Missing date
+2026-11-04,Checking,expense,not-a-number,Bookstore,Invalid amount
+2026-11-05,Unknown Account,expense,850,Movie Theater,Account does not exist
+2026-11-01,Checking,expense,450,Campus Cafe,Lunch
