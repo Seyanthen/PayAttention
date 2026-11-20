@@ -1,9 +1,18 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
+import re
 
 from .models import Account, Budget, Category, Goal, GoalContribution, RecurringTransaction, Transaction
 
 User = get_user_model()
+_CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
+
+
+def _normalize_currency(value):
+    value = value.strip().upper()
+    if not _CURRENCY_RE.fullmatch(value):
+        raise serializers.ValidationError("Currency must be a three-letter ISO code, such as USD.")
+    return value
 
 
 def _request_user(serializer):
@@ -29,10 +38,7 @@ class AccountSerializer(serializers.ModelSerializer):
         return value
 
     def validate_currency(self, value):
-        value = value.strip().upper()
-        if len(value) != 3 or not value.isalpha():
-            raise serializers.ValidationError("Currency must be a three-letter code, such as USD.")
-        return value
+        return _normalize_currency(value)
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -78,10 +84,7 @@ class TransactionSerializer(serializers.ModelSerializer):
         return attrs
 
     def validate_currency(self, value):
-        value = value.strip().upper()
-        if len(value) != 3 or not value.isalpha():
-            raise serializers.ValidationError("Currency must be a three-letter code, such as USD.")
-        return value
+        return _normalize_currency(value)
 
 
 class BudgetSerializer(serializers.ModelSerializer):
@@ -107,10 +110,7 @@ class BudgetSerializer(serializers.ModelSerializer):
         return value
 
     def validate_currency(self, value):
-        value = value.strip().upper()
-        if len(value) != 3 or not value.isalpha():
-            raise serializers.ValidationError("Currency must be a three-letter code, such as USD.")
-        return value
+        return _normalize_currency(value)
 
 
 class GoalContributionSerializer(serializers.ModelSerializer):
@@ -141,10 +141,7 @@ class GoalSerializer(serializers.ModelSerializer):
         return value
 
     def validate_currency(self, value):
-        value = value.strip().upper()
-        if len(value) != 3 or not value.isalpha():
-            raise serializers.ValidationError("Currency must be a three-letter code, such as USD.")
-        return value
+        return _normalize_currency(value)
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:

@@ -15,6 +15,7 @@ from .views import (
     cash_flow_report_view,
     category_report_view,
     health,
+    readiness,
     monthly_report_view,
     me,
     summary,
@@ -31,6 +32,7 @@ router.register("goals", GoalViewSet, basename="goal")
 
 urlpatterns = [
     path("health/", health, name="health"),
+    path("health/ready/", readiness, name="readiness"),
     path("me/", me, name="me"),
     path("summary/", summary, name="summary"),
     path("summary/current-month/", current_month_summary, name="current-month-summary"),

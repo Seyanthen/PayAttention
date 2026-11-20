@@ -6,6 +6,7 @@ from django.http import HttpResponse, JsonResponse
 
 from django.http import JsonResponse
 from django.utils import timezone
+from django.db import connection
 from django.db.models import Q, IntegerField, Sum, Value
 from django.db.models.functions import Coalesce
 from rest_framework import permissions, serializers, status, viewsets
@@ -26,6 +27,15 @@ class OwnedModelViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return self.queryset.filter(owner=self.request.user)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
 
 class AccountViewSet(OwnedModelViewSet):
@@ -251,6 +261,17 @@ def budgets_for_month(request, month):
 @permission_classes([permissions.AllowAny])
 def health(request):
     return JsonResponse({"status": "ok"})
+
+
+@api_view(["GET"])
+@permission_classes([permissions.AllowAny])
+def readiness(request):
+    """Report whether the application can reach its configured database."""
+    try:
+        connection.ensure_connection()
+    except Exception:
+        return Response({"status": "not_ready", "database": "unavailable"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    return Response({"status": "ready", "database": "ok"})
 
 
 @api_view(["GET"])

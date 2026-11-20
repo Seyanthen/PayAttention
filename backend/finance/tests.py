@@ -1,6 +1,7 @@
 from datetime import date
 
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
@@ -465,4 +466,75 @@ class FinanceApiTests(APITestCase):
         self.assertEqual(response.data[0]["remaining_amount_minor"], 6500)
         self.assertEqual(response.data[0]["progress_percent"], 35.0)
         self.assertEqual(self.client.get(reverse("goal-detail", args=[other_goal.id])).status_code, 404)
+
+    def test_protected_reporting_and_export_endpoints_require_authentication(self):
+        self.client.force_authenticate(user=None)
+        for url in (
+            reverse("me"),
+            reverse("summary"),
+            reverse("current-month-summary"),
+            reverse("monthly-report"),
+            reverse("transaction-export"),
+        ):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 401, url)
+
+    def test_health_endpoint_is_public_and_does_not_expose_configuration(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.get(reverse("health"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok"})
+
+    def test_readiness_reports_database_status_and_correlation_id(self):
+        response = self.client.get(reverse("readiness"), HTTP_X_REQUEST_ID="qa-run-123")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {"status": "ready", "database": "ok"})
+        self.assertEqual(response["X-Request-ID"], "qa-run-123")
+
+    def test_invalid_correlation_id_is_replaced(self):
+        response = self.client.get(reverse("health"), HTTP_X_REQUEST_ID="bad value\r\n")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotEqual(response["X-Request-ID"], "bad value\r\n")
+        self.assertLessEqual(len(response["X-Request-ID"]), 64)
+
+    def test_pagination_is_available_on_demand_without_changing_legacy_lists(self):
+        Account.objects.create(owner=self.user, name="Savings")
+        legacy_response = self.client.get(reverse("account-list"))
+        self.assertIsInstance(legacy_response.data, list)
+        paged_response = self.client.get(reverse("account-list"), {"limit": 1})
+        self.assertEqual(paged_response.status_code, 200)
+        self.assertEqual(paged_response.data["count"], 2)
+        self.assertEqual(len(paged_response.data["results"]), 1)
+
+    def test_api_throttling_is_configured_for_anonymous_and_authenticated_clients(self):
+        throttle_classes = settings.REST_FRAMEWORK["DEFAULT_THROTTLE_CLASSES"]
+        self.assertIn("rest_framework.throttling.AnonRateThrottle", throttle_classes)
+        self.assertIn("rest_framework.throttling.UserRateThrottle", throttle_classes)
+        self.assertEqual(settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]["anon"], "60/min")
+        self.assertEqual(settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]["user"], "600/min")
+
+    def test_validation_rejects_non_ascii_currency_and_negative_amounts(self):
+        response = self.client.post(reverse("account-list"), {
+            "name": "Bad Currency", "account_type": "checking",
+            "currency": "ＵＳＤ", "opening_balance_minor": 0,
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("currency", response.data)
+
+        response = self.client.post(reverse("transaction-list"), {
+            "account": self.account.id, "transaction_type": "expense",
+            "amount_minor": -1, "currency": "USD", "occurred_on": "2026-01-01",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("amount_minor", response.data)
+
+    def test_cross_user_budget_update_and_delete_are_hidden(self):
+        foreign_budget = Budget.objects.create(
+            owner=self.other_user,
+            category=Category.objects.create(owner=self.other_user, name="Private", category_type="expense"),
+            name="Private budget", amount_minor=1000,
+            period_start=date(2026, 1, 1), period_end=date(2026, 1, 31),
+        )
+        self.assertEqual(self.client.patch(reverse("budget-detail", args=[foreign_budget.id]), {"name": "Changed"}, format="json").status_code, 404)
+        self.assertEqual(self.client.delete(reverse("budget-detail", args=[foreign_budget.id])).status_code, 404)
 

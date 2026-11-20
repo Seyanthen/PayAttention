@@ -83,11 +83,13 @@ def account_transactions(user, account: Account):
 
 def account_balance_minor(account: Account) -> int:
     """Return the authoritative account balance in integer minor units."""
-    incoming = account.transactions.filter(transaction_type=Transaction.TransactionType.INCOME).aggregate(total=Sum("amount_minor"))["total"] or 0
-    expenses = account.transactions.filter(transaction_type=Transaction.TransactionType.EXPENSE).aggregate(total=Sum("amount_minor"))["total"] or 0
-    outgoing_transfers = account.transactions.filter(transaction_type=Transaction.TransactionType.TRANSFER).aggregate(total=Sum("amount_minor"))["total"] or 0
-    incoming_transfers = Transaction.objects.filter(transfer_account=account, transaction_type=Transaction.TransactionType.TRANSFER).aggregate(total=Sum("amount_minor"))["total"] or 0
-    return account.opening_balance_minor + incoming - expenses - outgoing_transfers + incoming_transfers
+    totals = Transaction.objects.filter(Q(account=account) | Q(transfer_account=account)).aggregate(
+        incoming=Coalesce(Sum("amount_minor", filter=Q(account=account, transaction_type=Transaction.TransactionType.INCOME)), Value(0)),
+        expenses=Coalesce(Sum("amount_minor", filter=Q(account=account, transaction_type=Transaction.TransactionType.EXPENSE)), Value(0)),
+        outgoing_transfers=Coalesce(Sum("amount_minor", filter=Q(account=account, transaction_type=Transaction.TransactionType.TRANSFER)), Value(0)),
+        incoming_transfers=Coalesce(Sum("amount_minor", filter=Q(transfer_account=account, transaction_type=Transaction.TransactionType.TRANSFER)), Value(0)),
+    )
+    return account.opening_balance_minor + totals["incoming"] - totals["expenses"] - totals["outgoing_transfers"] + totals["incoming_transfers"]
 
 
 def user_total_balance_minor(user) -> int:
