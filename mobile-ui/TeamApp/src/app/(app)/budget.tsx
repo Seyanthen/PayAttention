@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import {
   Alert,
   Keyboard,
@@ -17,48 +17,35 @@ import { AndroidScreenSafeArea } from '@/components/android-screen-safe-area';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatMinorUnitsAsDollars, parseDollarAmountToMinorUnits, validatePositiveDollarAmount } from '@/services/validation';
+import { addBudget, deleteBudget, getBudgets, setActiveBudgetMonth, subscribeToBudgets, updateBudget, type BudgetCategory } from '@/services/budget-store';
 
-type BudgetCategory = { id: string; name: string; spent: number; limit: number; color: string };
-
-const initialBudgets: Record<string, BudgetCategory[]> = {
-  September: [
-    { id: 'groceries', name: 'Groceries', spent: 32700, limit: 50000, color: '#4D9DE0' },
-    { id: 'restaurants', name: 'Restaurants', spent: 18400, limit: 25000, color: '#E07A5F' },
-    { id: 'entertainment', name: 'Entertainment', spent: 14000, limit: 15000, color: '#9B8AFB' },
-    { id: 'transportation', name: 'Transportation', spent: 9600, limit: 18000, color: '#55A878' },
-  ],
-  October: [
-    { id: 'groceries', name: 'Groceries', spent: 21400, limit: 50000, color: '#4D9DE0' },
-    { id: 'restaurants', name: 'Restaurants', spent: 12800, limit: 25000, color: '#E07A5F' },
-    { id: 'entertainment', name: 'Entertainment', spent: 7200, limit: 15000, color: '#9B8AFB' },
-    { id: 'transportation', name: 'Transportation', spent: 5400, limit: 18000, color: '#55A878' },
-  ],
-};
-
-const budgetColors = ['#4D9DE0', '#E07A5F', '#9B8AFB', '#55A878', '#D49A4A'];
 const formatCurrency = (amount: number) => formatMinorUnitsAsDollars(amount);
 
 export default function BudgetScreen() {
   const theme = useTheme();
-  const [budgets, setBudgets] = useState(initialBudgets);
+  const budgets = useSyncExternalStore(subscribeToBudgets, getBudgets, getBudgets);
   const [monthIndex, setMonthIndex] = useState(0);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [limit, setLimit] = useState('');
   const [error, setError] = useState('');
+  const [recurring, setRecurring] = useState(true);
+  const [sortMode, setSortMode] = useState<'recent' | 'size'>('recent');
   const months = Object.keys(budgets);
   const month = months[monthIndex] ?? months[0];
-  const categories = budgets[month];
+  const categoriesInMonth = budgets[month];
+  const categories = useMemo(() => [...categoriesInMonth].sort((left, right) => sortMode === 'size' ? right.limit - left.limit : (right.lastActivityAt ?? 0) - (left.lastActivityAt ?? 0)), [categoriesInMonth, sortMode]);
+  useEffect(() => { setActiveBudgetMonth(month); }, [month]);
   const totals = useMemo(() => {
     const budget = categories.reduce((total, category) => total + category.limit, 0);
     const spent = categories.reduce((total, category) => total + category.spent, 0);
-    return { budget, spent, remaining: budget - spent, percent: budget ? Math.round((spent / budget) * 100) : 0 };
+    return { budget, spent, remaining: budget - spent, percent: budget ? Math.round((spent / budget) * 100) : 0, overBudget: categories.some((category) => category.spent > category.limit) };
   }, [categories]);
 
   const moveMonth = (direction: -1 | 1) => setMonthIndex((current) => (current + direction + months.length) % months.length);
   const closeModal = () => { Keyboard.dismiss(); setIsModalVisible(false); };
-  const openCreateModal = () => { setEditingId(null); setName(''); setLimit(''); setError(''); setIsModalVisible(true); };
+  const openCreateModal = () => { setEditingId(null); setName(''); setLimit(''); setRecurring(true); setError(''); setIsModalVisible(true); };
   const openEditModal = (category: BudgetCategory) => { setEditingId(category.id); setName(category.name); setLimit((category.limit / 100).toFixed(2)); setError(''); setIsModalVisible(true); };
 
   const saveBudget = () => {
@@ -68,32 +55,36 @@ export default function BudgetScreen() {
       setError(!trimmedName ? 'Enter a budget name.' : validatePositiveDollarAmount(limit, 'Monthly limit') ?? 'Enter a valid monthly limit.');
       return;
     }
-    setBudgets((current) => ({
-      ...current,
-      [month]: editingId
-        ? current[month].map((category) => category.id === editingId ? { ...category, name: trimmedName, limit: limitAmount } : category)
-        : [...current[month], { id: `${trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`, name: trimmedName, spent: 0, limit: limitAmount, color: budgetColors[current[month].length % budgetColors.length] }],
-    }));
+    if (editingId) {
+      updateBudget(month, editingId, { name: trimmedName, limit: limitAmount });
+    } else {
+      const colors = ['#4D9DE0', '#E07A5F', '#9B8AFB', '#55A878', '#D49A4A'];
+      addBudget(month, { id: `${trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`, name: trimmedName, spent: 0, limit: limitAmount, color: colors[categories.length % colors.length], recurring });
+    }
     closeModal();
   };
 
   const confirmDelete = (category: BudgetCategory) => Alert.alert('Delete budget?', `Remove “${category.name}” from ${month}?`, [
     { text: 'Cancel', style: 'cancel' },
-    { text: 'Delete', style: 'destructive', onPress: () => setBudgets((current) => ({ ...current, [month]: current[month].filter((item) => item.id !== category.id) })) },
+    { text: 'Delete', style: 'destructive', onPress: () => deleteBudget(month, category.id) },
   ]);
 
   return (
     <AndroidScreenSafeArea style={[styles.safeArea, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}><View><Text style={[styles.eyebrow, { color: theme.textSecondary }]}>YOUR PLAN</Text><Text style={[styles.title, { color: theme.text }]}>Budget</Text></View><View style={styles.headerBadge}><Text style={styles.headerBadgeText}>On track</Text></View></View>
+        <View style={styles.header}><Text style={[styles.title, { color: theme.text }]}>Budget</Text><View style={[styles.headerBadge, totals.overBudget && { backgroundColor: '#FDE2E2' }]}><Text style={[styles.headerBadgeText, totals.overBudget && { color: '#B42318' }]}>{totals.overBudget ? 'Not on track' : 'On track'}</Text></View></View>
+        <Text style={[{ fontSize: 14, lineHeight: 21, marginTop: -Spacing.one }, { color: theme.textSecondary }]}>Set spending limits that keep your everyday choices aligned with your bigger goals.</Text>
         <View style={styles.monthRow}><Pressable accessibilityLabel="Previous month" onPress={() => moveMonth(-1)} style={styles.monthArrow}><Text style={[styles.arrowText, { color: theme.text }]}>‹</Text></Pressable><Text style={[styles.monthTitle, { color: theme.text }]}>{month} Budget</Text><Pressable accessibilityLabel="Next month" onPress={() => moveMonth(1)} style={styles.monthArrow}><Text style={[styles.arrowText, { color: theme.text }]}>›</Text></Pressable></View>
         <View style={[styles.overviewCard, { backgroundColor: theme.backgroundElement }]}><View style={styles.overviewHeader}><View><Text style={[styles.overviewLabel, { color: theme.textSecondary }]}>Total spent</Text><Text style={[styles.overviewAmount, { color: theme.text }]}>{formatCurrency(totals.spent)}</Text></View><View style={styles.percentCircle}><Text style={styles.percentText}>{totals.percent}%</Text></View></View><View style={styles.overviewTrack}><View style={[styles.overviewFill, { width: `${Math.min(totals.percent, 100)}%` }]} /></View><View style={styles.overviewFooter}><Text style={[styles.overviewCaption, { color: theme.textSecondary }]}>of {formatCurrency(totals.budget)} planned</Text><Text style={[styles.remainingText, { color: theme.text }]}>{formatCurrency(totals.remaining)} left</Text></View></View>
         <View style={styles.sectionHeader}><View><Text style={[styles.sectionTitle, { color: theme.text }]}>Spending by category</Text><Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>Keep an eye on your biggest expenses</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Add budget" onPress={openCreateModal} style={styles.addButton}><Text style={styles.addButtonText}>+ Add budget</Text></Pressable></View>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {([['recent', 'Most recent'], ['size', 'Largest limit']] as const).map(([value, label]) => <Pressable key={value} accessibilityRole="button" accessibilityLabel={`Sort budgets by ${label.toLowerCase()}`} onPress={() => setSortMode(value)} style={{ backgroundColor: sortMode === value ? '#D9EAFB' : theme.backgroundElement, borderColor: sortMode === value ? '#3478B8' : theme.backgroundSelected, borderRadius: 14, borderWidth: 1, paddingHorizontal: 11, paddingVertical: 7 }}><Text style={{ color: sortMode === value ? '#1E4F7A' : theme.textSecondary, fontSize: 12, fontWeight: '700' }}>{label}</Text></Pressable>)}
+        </View>
         <Text style={[styles.categoryCount, { color: theme.textSecondary }]}>{categories.length} categories</Text>
         <View style={styles.categoryList}>{categories.map((category) => { const percent = category.limit ? Math.round((category.spent / category.limit) * 100) : 0; const progress = Math.min(percent, 100); const isOver = percent > 100; const progressColor = isOver ? '#D64550' : percent >= 90 ? '#E6A23C' : category.color; return <View key={category.id} style={[styles.categoryCard, { backgroundColor: theme.backgroundElement }]}><View style={styles.categoryTopRow}><View style={styles.categoryNameRow}><View style={[styles.iconBubble, { backgroundColor: `${category.color}22` }]}><Text style={[styles.categoryIcon, { color: category.color }]}>{category.name.slice(0, 2).toUpperCase()}</Text></View><View><Text style={[styles.categoryName, { color: theme.text }]}>{category.name}</Text><Text style={[styles.categoryLimit, { color: theme.textSecondary }]}>Monthly limit {formatCurrency(category.limit)}</Text></View></View><View style={styles.categoryAmount}><Text style={[styles.spentAmount, { color: theme.text }]}>{formatCurrency(category.spent)}</Text><Text style={[styles.percentLabel, { color: progressColor }]}>{isOver ? 'Over' : `${percent}%`}</Text></View></View><View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: progressColor }]} /></View><Text style={[styles.progressCaption, { color: theme.textSecondary }]}>{isOver ? `${formatCurrency(category.spent - category.limit)} over budget` : `${formatCurrency(category.limit - category.spent)} remaining`}</Text><View style={styles.cardActions}><Pressable accessibilityRole="button" accessibilityLabel={`Edit ${category.name} budget`} onPress={() => openEditModal(category)}><Text style={styles.editButtonText}>Edit</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={`Delete ${category.name} budget`} onPress={() => confirmDelete(category)}><Text style={styles.deleteButtonText}>Delete</Text></Pressable></View></View>; })}</View>
         <View style={[styles.tipCard, { borderColor: theme.backgroundSelected }]}><Text style={styles.tipIcon}>✦</Text><View style={styles.tipCopy}><Text style={[styles.tipTitle, { color: theme.text }]}>A little progress goes a long way</Text><Text style={[styles.tipText, { color: theme.textSecondary }]}>You have {formatCurrency(totals.remaining)} left across your categories this month.</Text></View></View>
       </ScrollView>
-      <Modal visible={isModalVisible} transparent animationType="slide" onRequestClose={closeModal}><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalBackdrop}><View style={[styles.modalCard, { backgroundColor: theme.background }]}><View style={styles.modalHeader}><View><Text style={[styles.modalTitle, { color: theme.text }]}>{editingId ? 'Edit budget' : 'New budget'}</Text><Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>Set a monthly spending limit.</Text></View><Pressable accessibilityLabel="Close budget form" onPress={closeModal}><Text style={[styles.closeButton, { color: theme.textSecondary }]}>Close</Text></Pressable></View><Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Budget name</Text><TextInput autoFocus style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]} placeholder="e.g. Utilities" placeholderTextColor={theme.textSecondary} value={name} onChangeText={setName} /><Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Monthly limit in US dollars</Text><TextInput style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]} placeholder="$0.00" placeholderTextColor={theme.textSecondary} keyboardType="decimal-pad" value={limit} onChangeText={setLimit} />{error ? <Text style={styles.formError}>{error}</Text> : null}<Pressable accessibilityRole="button" onPress={saveBudget} style={styles.saveButton}><Text style={styles.saveButtonText}>{editingId ? 'Save changes' : 'Create budget'}</Text></Pressable></View></KeyboardAvoidingView></Modal>
+      <Modal visible={isModalVisible} transparent animationType="slide" onRequestClose={closeModal}><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalBackdrop}><View style={[styles.modalCard, { backgroundColor: theme.background }]}><View style={styles.modalHeader}><View><Text style={[styles.modalTitle, { color: theme.text }]}>{editingId ? 'Edit budget' : 'New budget'}</Text><Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>Set a monthly spending limit.</Text></View><Pressable accessibilityLabel="Close budget form" onPress={closeModal}><Text style={[styles.closeButton, { color: theme.textSecondary }]}>Close</Text></Pressable></View><Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Budget name</Text><TextInput autoFocus style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]} placeholder="e.g. Utilities" placeholderTextColor={theme.textSecondary} value={name} onChangeText={setName} /><Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Monthly limit in US dollars</Text><TextInput style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]} placeholder="$0.00" placeholderTextColor={theme.textSecondary} keyboardType="decimal-pad" value={limit} onChangeText={setLimit} />{!editingId ? <><Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Budget duration</Text><View style={{ flexDirection: 'row', gap: 8 }}><Pressable onPress={() => setRecurring(false)} style={{ flex: 1, borderColor: recurring ? theme.backgroundSelected : '#3478B8', borderRadius: 10, borderWidth: 1, padding: 10 }}><Text style={{ color: theme.text, fontSize: 12, fontWeight: '700', textAlign: 'center' }}>Current month only</Text></Pressable><Pressable onPress={() => setRecurring(true)} style={{ flex: 1, borderColor: recurring ? '#3478B8' : theme.backgroundSelected, borderRadius: 10, borderWidth: 1, padding: 10 }}><Text style={{ color: theme.text, fontSize: 12, fontWeight: '700', textAlign: 'center' }}>Continuing</Text></Pressable></View></> : null}{error ? <Text style={styles.formError}>{error}</Text> : null}<Pressable accessibilityRole="button" onPress={saveBudget} style={styles.saveButton}><Text style={styles.saveButtonText}>{editingId ? 'Save changes' : 'Create budget'}</Text></Pressable></View></KeyboardAvoidingView></Modal>
     </AndroidScreenSafeArea>
   );
 }

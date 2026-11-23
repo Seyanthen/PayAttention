@@ -36,6 +36,7 @@ export default function GoalsScreen() {
     const targetAmount = goals.reduce((total, goal) => total + goal.target, 0);
     return { saved: savedAmount, target: targetAmount, percent: targetAmount ? Math.round((savedAmount / targetAmount) * 100) : 0 };
   }, [goals]);
+  const isOverBudget = goals.some((goal) => goal.saved > goal.target);
 
   const openModal = () => {
     setName(''); setTarget(''); setSaved(''); setDeadline(''); setError(''); setIsModalVisible(true);
@@ -67,8 +68,8 @@ export default function GoalsScreen() {
     <AndroidScreenSafeArea style={[styles.safeArea, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <View><Text style={[styles.eyebrow, { color: theme.textSecondary }]}>YOUR PLAN</Text><Text style={[styles.title, { color: theme.text }]}>Savings goals</Text></View>
-          <View style={styles.headerBadge}><Text style={styles.headerBadgeText}>On track</Text></View>
+          <Text style={[styles.title, { color: theme.text }]}>Savings goals</Text>
+          <View style={[styles.headerBadge, isOverBudget && { backgroundColor: '#FDE2E2' }]}><Text style={[styles.headerBadgeText, isOverBudget && { color: '#B42318' }]}>{isOverBudget ? 'Not on track' : 'On track'}</Text></View>
         </View>
         <Text style={[styles.intro, { color: theme.textSecondary }]}>Give your money a destination and make steady progress toward what matters.</Text>
         <View style={styles.summaryCard}>
