@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction as db_transaction
 
-from finance.models import Account, Budget, Category, Transaction
+from finance.models import Account, Budget, Category, Transaction, Goal, GoalContribution
 
 
 class Command(BaseCommand):
@@ -98,6 +98,77 @@ class Command(BaseCommand):
             period_end=date(2026, 10, 31),
             defaults={"amount_minor": 40000},
         )
+        
+        
+        # demo data for goals and goalcontribution
+        emergency_fund, _ = Goal.objects.get_or_create(
+            owner=user,
+            name="Emergency fund",
+            defaults={
+                "target_amount_minor": 1000000,
+                "target_date": date(2027, 6, 30),
+                "currency": "USD",
+                "is_completed": False,
+            },
+        )
+
+        laptop_goal, _ = Goal.objects.get_or_create(
+            owner=user,
+            name="New laptop",
+            defaults={
+                "target_amount_minor": 150000,
+                "target_date": date(2026, 12, 31),
+                "currency": "USD",
+                "is_completed": False,
+            },
+        )
+
+        vacation_goal, _ = Goal.objects.get_or_create(
+            owner=user,
+            name="Spring break trip",
+            defaults={
+                "target_amount_minor": 120000,
+                "target_date": date(2026, 9, 1),
+                "currency": "USD",
+                "is_completed": True,
+            },
+        )
+        
+        contributions = [
+            {
+                "goal": emergency_fund,
+                "amount_minor": 250000,
+                "contributed_on": date(2026, 8, 15),
+            },
+            {
+                "goal": emergency_fund,
+                "amount_minor": 175000,
+                "contributed_on": date(2026, 9, 15),
+            },
+            {
+                "goal": emergency_fund,
+                "amount_minor": 125000,
+                "contributed_on": date(2026, 10, 15),
+            },
+            {
+                "goal": laptop_goal,
+                "amount_minor": 50000,
+                "contributed_on": date(2026, 9, 20),
+            },
+            {
+                "goal": laptop_goal,
+                "amount_minor": 25000,
+                "contributed_on": date(2026, 10, 20),
+            },
+            {
+                "goal": vacation_goal,
+                "amount_minor": 120000,
+                "contributed_on": date(2026, 8, 1),
+            },
+        ]
+
+        for data in contributions:
+            GoalContribution.objects.get_or_create(**data)
 
         self.stdout.write(self.style.SUCCESS("Demo data is ready."))
         self.stdout.write("Username: demo-user")
