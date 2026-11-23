@@ -18,10 +18,10 @@ import {
 import { authenticatedFetch, authenticatedGet, getApiErrorMessage } from '@/services/api';
 import { parseDollarAmountToMinorUnits, validateTransaction, validateTransactionFilters, type ValidationErrors } from '@/services/validation';
 import { addGoalContribution, getGoals, removeGoalContribution, subscribeToGoals } from '@/services/goal-store';
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/services/transaction-categories';
 import { addLocalTransaction, getLocalTransactions, removeLocalTransaction } from '@/services/transaction-store';
 import type { Transaction, TransactionKind } from '@/services/transaction-types';
 import { AndroidScreenSafeArea } from '@/components/android-screen-safe-area';
+import { addBudgetSpent, getActiveBudgetMonth, getBudgets, subscribeToBudgets } from '@/services/budget-store';
 
 type ApiTransaction = {
   id: number;
@@ -53,9 +53,9 @@ const initialTransactions: Transaction[] = [];
 export default function TransactionsScreen() {
   const isMounted = useRef(true);
   const goals = useSyncExternalStore(subscribeToGoals, getGoals, getGoals);
+  const budgets = useSyncExternalStore(subscribeToBudgets, getBudgets, getBudgets);
   const [transactions, setTransactions] = useState(initialTransactions);
   const [accounts, setAccounts] = useState<Lookup[]>([]);
-  const [lookupCategories, setLookupCategories] = useState<Lookup[]>([]);
   const [filters, setFilters] = useState<TransactionFilters>({ search: '', account: '', category: '', transactionType: '', startDate: '', endDate: '', minAmountDollars: '', maxAmountDollars: '' });
   const [filterErrors, setFilterErrors] = useState<ValidationErrors>({});
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -134,7 +134,6 @@ export default function TransactionsScreen() {
       const typedAccounts = accountRows as Lookup[];
       const typedCategories = categoryRows as Lookup[];
       setAccounts(typedAccounts);
-      setLookupCategories(typedCategories);
       const serverTransactions = (transactionRows as ApiTransaction[]).map((row) => transactionFromApi(row, typedAccounts, typedCategories));
       setTransactions((current) => {
         const matchingLocalTransactions = getLocalTransactions().filter((transaction) => matchesFilters(transaction, nextFilters));
@@ -184,11 +183,15 @@ export default function TransactionsScreen() {
     { income: 0, expenses: 0 },
   ), [transactions]);
 
+  const budgetCategoryOptions = useMemo(() => Object.values(budgets).flat().reduce<{ id: string; name: string }[]>((options, budget) => {
+    if (!options.some((option) => option.name.toLowerCase() === budget.name.toLowerCase())) options.push({ id: budget.name, name: budget.name });
+    return options;
+  }, []), [budgets]);
+
   const addCategoryOptions = useMemo(() => {
     if (kind === 'goal') return goals.map((goal) => ({ id: goal.id, name: goal.name }));
-    const categoriesForType = kind === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
-    return categoriesForType.map((name) => ({ id: name, name }));
-  }, [goals, kind]);
+    return kind === 'income' ? [{ id: 'Other', name: 'Other' }] : [...budgetCategoryOptions, { id: 'Other', name: 'Other' }];
+  }, [budgetCategoryOptions, goals, kind]);
 
   const openAdd = () => {
     setMerchant(''); setAmount(''); setCategory('Other'); setAccount('Checking Account'); setKind('expense'); setDate(formatToday()); setNotes(''); setTransferAccount(''); setFieldErrors({}); setIsAddVisible(true);
@@ -232,6 +235,7 @@ export default function TransactionsScreen() {
         return;
       }
     }
+    if (kind === 'expense' && category !== 'Other') addBudgetSpent(getActiveBudgetMonth(), category, amountMinor);
     const newTransaction: Transaction = { id: Date.now(), merchant: merchant.trim(), amount: amountMinor, category: kind === 'goal' ? goals.find((item) => item.id === category)?.name ?? category : category, categoryId: kind === 'goal' ? category : undefined, contributionId, account, date: date.trim(), timestamp: new Date().toISOString(), notes: notes.trim(), kind };
     addLocalTransaction(newTransaction);
     setTransactions((current) => sortTransactions([newTransaction, ...current]));
@@ -252,6 +256,7 @@ export default function TransactionsScreen() {
       const isLocal = getLocalTransactions().some((item) => item.id === transaction.id);
       if (isLocal) {
         removeLocalTransaction(transaction.id);
+        if (transaction.kind === 'expense' && transaction.category !== 'Other') addBudgetSpent(getActiveBudgetMonth(), transaction.category, -transaction.amount);
         if (transaction.kind === 'goal' && transaction.categoryId) {
           if (transaction.contributionId) await removeGoalContribution(transaction.categoryId, transaction.contributionId);
           else await addGoalContribution(transaction.categoryId, -transaction.amount);
@@ -307,7 +312,7 @@ export default function TransactionsScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>Transactions</Text>
-            {/* <Text style={styles.subtitle}>Track your income and spending</Text> */}
+            <Text style={styles.subtitle}>Track your income and spending</Text>
           </View>
           <View style={styles.headerActions}>
             <Pressable accessibilityRole="button" accessibilityLabel="Add transaction" style={styles.addButton} onPress={openAdd}><Text style={styles.addButtonText}>+ Add</Text></Pressable>
@@ -329,7 +334,7 @@ export default function TransactionsScreen() {
           <Text style={styles.inputLabel}>Category</Text>
           <View style={styles.optionRow}>
             <Pressable style={[styles.optionButton, !filters.category && styles.selectedOption]} onPress={() => setFilters((current) => ({ ...current, category: '' }))}><Text style={styles.optionText}>All</Text></Pressable>
-            {(filters.transactionType === 'goal' ? goals.map((goal) => ({ id: goal.id, name: goal.name })) : [...lookupCategories, ...EXPENSE_CATEGORIES.map((name) => ({ id: name, name }))].filter((option, index, options) => options.findIndex((candidate) => candidate.name.toLowerCase() === option.name.toLowerCase()) === index)).map((option) => <Pressable key={option.id} style={[styles.optionButton, filters.category === String(option.id) && styles.selectedOption]} onPress={() => setFilters((current) => ({ ...current, category: String(option.id) }))}><Text style={styles.optionText}>{option.name}</Text></Pressable>)}
+            {(filters.transactionType === 'goal' ? goals.map((goal) => ({ id: goal.id, name: goal.name })) : [...budgetCategoryOptions, { id: 'Other', name: 'Other' }]).map((option) => <Pressable key={option.id} style={[styles.optionButton, filters.category === String(option.id) && styles.selectedOption]} onPress={() => setFilters((current) => ({ ...current, category: String(option.id) }))}><Text style={styles.optionText}>{option.name}</Text></Pressable>)}
           </View>
           <Text style={styles.inputLabel}>Account</Text>
           <View style={styles.optionRow}>

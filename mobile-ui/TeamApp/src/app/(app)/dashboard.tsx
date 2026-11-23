@@ -119,7 +119,7 @@ export default function DashboardScreen() {
             <ScrollView contentContainerStyle={styles.container}>
                 <View style={styles.header}>
                     <Text style={styles.title}>Dashboard</Text>
-                    {/* <Text style={styles.subtitle}>A clear view of your money</Text> */}
+                    <Text style={styles.subtitle}>A clear view of your money</Text>
                 </View>
 
                 <View style={styles.balanceCard}>
