@@ -8,7 +8,7 @@ Update this matrix when a user story, finance rule, API endpoint, or data contra
 | Authentication returns a token for valid credentials and rejects invalid credentials | `backend/config/urls.py`, `backend/openapi.yaml` | `AUTH-001`, `AUTH-002` | Planned |
 | Protected endpoints require authentication | `backend/finance/views.py` | `AUTH-003` | Planned |
 | Users can access only their own records | `backend/finance/permissions.py`, viewsets | `SEC-001` | Partial: account list covered |
-| Money uses integer minor units | `backend/backend information/README.md`, serializers/models | `FIN-001`, `FIN-002` | Partial: balance arithmetic covered |
+| Money uses integer minor units | `backend/openapi.yaml`, `backend/finance/models.py`, `backend/finance/serializers.py` | `FIN-001`, `FIN-002` | Partial: balance arithmetic covered |
 | Balance includes opening balance, income, expenses, and transfers | `backend/finance/services.py` | `FIN-003` | Partial: expense case covered |
 | Transaction category matches transaction type | `backend/finance/serializers.py` | `VAL-001` | Planned |
 | Transfers require a destination account and only transfers may specify one | `backend/finance/serializers.py` | `FIN-004`, `VAL-002` | Planned |

@@ -10,7 +10,7 @@ The backend already enforced authenticated, owner-scoped querysets for its prima
 - Added opt-in `PAYATTENTION_TESTING=1` SQLite mode so tests cannot use configured PostgreSQL data.
 - Added security defaults for secure cookies, content-type sniffing, referrer policy, and frame protection; HTTPS redirect remains explicitly environment-controlled.
 - Added structured console logging for Django request warnings and the finance application logger without logging request bodies or credentials.
-- Tightened currency validation to ASCII three-letter codes rather than Unicode alphabetic characters.
+- Tightened currency validation across account, transaction, budget, goal, and recurring-transaction serializers to ASCII three-letter codes rather than Unicode alphabetic characters.
 - Reduced `account_balance_minor()` from four aggregate queries to one aggregate query while preserving transfer semantics.
 - Added tests for protected reporting/export endpoints, public health behavior, cross-user budget mutation isolation, and validation failures.
 - Added `/api/health/ready/` database readiness checks.
@@ -46,15 +46,16 @@ The backend already enforced authenticated, owner-scoped querysets for its prima
 ## Remaining risks and recommendations
 
 - PostgreSQL migrations, indexes, TLS behavior, and production startup still require a reachable disposable PostgreSQL instance or CI service; SQLite does not replace that verification.
-- The temporary Neon branch now contains preserved test databases from verification; remove them after review if the branch owner wants a clean database.
-- No request rate limiting, API pagination, refresh-token/session lifecycle, audit trail, or centralized exception correlation ID is implemented.
-- Health is a liveness endpoint only and does not verify database readiness.
-- Deployment manifests/CI were not present in the inspected repository, so image hardening, secret injection, worker timeouts, backups, and rollback cannot be verified here.
+- A prior remote PostgreSQL verification encountered connection and teardown limitations; current repeatable verification uses isolated SQLite tests and the committed PostgreSQL CI workflow.
+- Refresh-token/session lifecycle and an audit trail are outside the current implementation.
+- Correlation IDs are returned in responses and included in request context, but logs remain console-oriented rather than centralized JSON/audit logging.
+- Some reporting paths calculate derived values per returned object; query-count profiling should be considered if dataset size grows.
+- Deployment configuration is a baseline only: secret-manager integration, backups, rollback, and TLS termination remain infrastructure-specific.
 - OpenAPI should be regenerated/reviewed against the implemented routes and response fields.
 
 ## Recommended next steps
 
 1. Run the suite and migrations against disposable PostgreSQL in CI.
-2. Add a readiness endpoint and request correlation IDs, then centralize structured JSON logs.
-3. Add throttling/pagination and document API limits.
-4. Add deployment manifests with secret-manager references, non-root runtime, health probes, and backup/rollback procedures.
+2. Profile reporting endpoints if dataset size grows and optimize any measured query-count hotspots.
+3. Keep OpenAPI and release documentation synchronized with route changes.
+4. Define infrastructure-owned secret, backup, rollback, and TLS procedures if deployment scope changes.
