@@ -163,8 +163,5 @@ class RecurringTransactionSerializer(serializers.ModelSerializer):
         return value
 
     def validate_currency(self, value):
-        value = value.strip().upper()
-        if len(value) != 3 or not value.isalpha():
-            raise serializers.ValidationError("Currency must be a three-letter code, such as USD.")
-        return value
+        return _normalize_currency(value)
 

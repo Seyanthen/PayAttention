@@ -1,6 +1,6 @@
 # QA Information
 
-This directory is the QA working area and follows the backend's documentation pattern: a local README explains the area, while focused documents describe execution and integration responsibilities.
+Detailed QA artifacts referenced by [`../README.md`](../README.md).
 
 ## Documents
 
@@ -11,6 +11,5 @@ This directory is the QA working area and follows the backend's documentation pa
 | `TEST_CASE_TEMPLATE.md` | Standard format for manual and automated cases |
 | `BUG_REPORT_TEMPLATE.md` | Reproducible defect report format |
 | `RELEASE_CHECKLIST.md` | Release and milestone quality gates |
-| `fixtures/README.md` | Safe fixture and seed-data conventions |
 
 Keep planned coverage labeled as planned until an automated or repeatable manual test exists. Link pull requests, CI runs, screenshots, logs, and API responses from the relevant case or defect.

@@ -398,6 +398,12 @@ class FinanceApiTests(APITestCase):
             "frequency": "daily", "next_occurrence": "2026-02-30",
         }, format="json")
         self.assertEqual(invalid.status_code, 400)
+        invalid_currency = self.client.post(reverse("recurring-transaction-list"), {
+            "name": "Rent", "amount_minor": 95000, "transaction_type": "expense",
+            "frequency": "monthly", "next_occurrence": "2026-10-01", "currency": "ÜSD",
+        }, format="json")
+        self.assertEqual(invalid_currency.status_code, 400)
+        self.assertIn("currency", invalid_currency.data)
 
     def test_recurring_date_advancement_handles_calendar_edges(self):
         self.assertEqual(next_recurring_date(date(2026, 1, 31), "monthly"), date(2026, 2, 28))

@@ -1,123 +1,51 @@
 # QA / Testing
 
-This folder contains the quality strategy, test inventory, reusable templates, and release gates for Pay Attention.
-
-The QA role protects correctness, privacy, usability, and integration quality across the React Native client, Django API, and PostgreSQL database. The backend provides the executable API test surface, and the mobile client now has compile-time validation plus implemented authentication and error-handling flows. Dedicated mobile UI tests and end-to-end tests remain outstanding.
+This folder is the single entry point for QA strategy, traceability, reusable templates, and release gates across the React Native client, Django API, and PostgreSQL database.
 
 ## Start here
 
-1. Read [`qa-testing.md`](qa-testing.md) for the role mission, responsibilities, integration contract, and definition of done.
-2. Read [`qa information/TEST_STRATEGY.md`](qa%20information/TEST_STRATEGY.md) for the test pyramid, environments, risk priorities, and required evidence.
-3. Use [`qa information/TRACEABILITY.md`](qa%20information/TRACEABILITY.md) to connect requirements to acceptance tests and automation.
-4. Copy [`qa information/TEST_CASE_TEMPLATE.md`](qa%20information/TEST_CASE_TEMPLATE.md) for new cases and [`qa information/BUG_REPORT_TEMPLATE.md`](qa%20information/BUG_REPORT_TEMPLATE.md) for defects.
-5. Complete [`qa information/RELEASE_CHECKLIST.md`](qa%20information/RELEASE_CHECKLIST.md) before a release or milestone demonstration.
+1. [`qa-testing.md`](qa-testing.md) — responsibilities and definition of done.
+2. [`qa information/TEST_STRATEGY.md`](qa%20information/TEST_STRATEGY.md) — test levels, risks, environments, and evidence.
+3. [`qa information/TRACEABILITY.md`](qa%20information/TRACEABILITY.md) — requirements mapped to test IDs.
+4. [`qa information/TEST_CASE_TEMPLATE.md`](qa%20information/TEST_CASE_TEMPLATE.md) and [`qa information/BUG_REPORT_TEMPLATE.md`](qa%20information/BUG_REPORT_TEMPLATE.md) — case and defect templates.
+5. [`qa information/RELEASE_CHECKLIST.md`](qa%20information/RELEASE_CHECKLIST.md) — milestone and release gates.
+6. [`qa information/GITHUB_QA_WORKFLOW.md`](qa%20information/GITHUB_QA_WORKFLOW.md) — issue and pull-request QA flow.
 
-## Current execution commands
+## Verification commands
 
-From `backend/`:
+Run from `backend/`:
 
-```text
+```powershell
 python manage.py check
-python manage.py test --keepdb
+python manage.py test --keepdb --noinput
 ```
 
-From `mobile-ui/TeamApp/`:
+Run from `mobile-ui/TeamApp/`:
 
-```text
-npx tsc --noEmit
+```powershell
+npx.cmd tsc --noEmit
 ```
 
-## Start the phone-accessible local environment
+Current baseline: `python manage.py check` passes. The backend test command discovers 39 tests but the local PostgreSQL test database is blocked by an existing `finance_savingsgoal` table. The mobile type check currently reports missing Playwright types and existing React Native web type errors.
 
-From PowerShell at the repository root, run:
+## Local phone testing
+
+From the repository root, run:
 
 ```powershell
 .\qa-testing\start-local.ps1
 ```
 
-The script detects the laptop's active LAN or hotspot IPv4 address, updates the
-local ignored `.env` files, and opens Django and Expo in separate windows:
-
-- `mobile-ui/TeamApp/.env` receives the Expo API URL.
-- `backend/.env` receives the matching `DJANGO_ALLOWED_HOSTS` value.
-- Django listens on `0.0.0.0:8000` so a phone can connect.
-- Expo starts from `mobile-ui/TeamApp`.
-
-Run the script again whenever the laptop changes networks. Because Expo embeds
-`EXPO_PUBLIC_*` values when it starts, restarting Expo is required after the
-detected IP changes. The generated `.env` files are intentionally ignored by
-Git; only this script and its documentation are committed.
-
-## Current implementation status
-
-| Requirement | Current status | Evidence / remaining work |
-|---|---|---|
-| Authentication tokens | Implemented | Django token endpoint and token-authenticated API requests are present. |
-| Login persistence | Implemented | Native tokens use `expo-secure-store`; web uses local storage; startup restoration is handled before navigation renders. |
-| Logout | Implemented | Dashboard logout clears in-memory and persisted authentication and returns to login. |
-| Development testing bypass | Implemented | `__DEV__`-only mock authentication allows UI testing without a backend token; API calls are blocked while mock auth is active. |
-| API errors | Partial | Backend validation and client HTTP error normalization exist; broader client API consumers and UI error states remain to be added. |
-| Loading states | Partial | Login, auth restoration, and logout have loading states; data screens remain largely static. |
-| Network errors | Partial | Client timeout, abort, connection, 401, 429, and 5xx handling exists; retry/offline handling and screen-level recovery remain. |
-| Form validation | Partial | Login and backend serializers validate inputs; client forms for accounts, transactions, and budgets are not complete. |
-| Backend API integration tests | Blocked | The suite previously passed 13 tests, but the current backend cannot import because `views.py` references missing `budget_spent_minor_for_period` in `finance/services.py`. Restore or remove that contract, then rerun the backend checks. |
-| Mobile automated tests | Not implemented | TypeScript compilation passes; no mobile unit/component test runner is configured. |
-
-## Latest verification
-
-| Check | Result |
-|---|---|
-| `npx tsc --noEmit` from `mobile-ui/TeamApp` | Passed |
-| `python manage.py check` from `backend` | Blocked by missing `budget_spent_minor_for_period` import |
-| `python manage.py test --keepdb` from `backend` | Blocked by the same import error before tests execute |
-
-The backend tests currently contain 13 API cases covering integer-unit balance calculation, authenticated ownership scoping, CRUD behavior, budget reporting, and invalid date ranges. They must be rerun after the import regression is corrected.
+The script detects the active LAN address, updates the ignored local `.env` files, and starts Django and Expo in separate windows. Run it again after changing networks. Expo must be restarted after an address change because it embeds `EXPO_PUBLIC_*` values at startup.
 
 ## Test data rules
 
 - Use synthetic accounts, users, merchants, and amounts only.
 - Keep fixtures small, deterministic, and anonymized.
-- Do not commit tokens, passwords used outside local test accounts, production exports, or real financial information.
+- Store money as integer minor units, such as `1250` for USD $12.50.
+- Never commit tokens, passwords, production exports, or real financial information.
 - Treat `backend/openapi.yaml`, backend serializers/services, database documentation, and approved finance rules as test oracles.
 
 ## Ownership
 
-QA owns the test inventory, execution evidence, regression plan, and defect reports. Backend, database, mobile, and finance leads own the behavior and contracts that QA verifies. Changes to financial rules must update the finance documentation and the corresponding QA cases together.
-
-## Frontend and Backend Commands
-To update the IP address for hosting (in powershell):
-      ```
-      powershell.exe -ExecutionPolicy Bypass -File .\qa-testing\start-local.ps1
-      ```
-
-Frontend start command: 
-    `npx expo start`
-
-Must be in Command Prompt terminal in the directory of 
-      `...mobile-ui\TeamApp`
-
-<!-- This is for Josh's Computer:
-cd D:\CSE310\PayAttention\mobile-ui\TeamApp
-
-        
-Backend start commands:
-      python manage.py check
-      python manage.py test --keepdb --noinput
-      python manage.py runserver
-
- -->
-      
-To start in the Vitrual Environment (in powershell terminal in ...\backend)
-      ```   
-      .\.venv\Scripts\python.exe manage.py check
-      ```
-      ```
-      .\.venv\Scripts\python.exe manage.py test --keepdb --noinput
-      ```
-      ```  
-      .\.venv\Scripts\python.exe manage.py runserver   
-      ```
-
-
-
-    
+QA owns the test inventory, execution evidence, regression plan, and defect reports. Backend, database, mobile, and finance leads own the behavior and contracts that QA verifies. Changes to financial rules must update the finance documentation and corresponding QA cases together.
