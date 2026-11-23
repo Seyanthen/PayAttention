@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { authenticatedFetch, authenticatedGet, getApiErrorMessage } from '@/services/api';
 import { parseDollarAmountToMinorUnits, validateTransaction, validateTransactionFilters, type ValidationErrors } from '@/services/validation';
-import { addGoalContribution, getGoals, subscribeToGoals } from '@/services/goal-store';
+import { addGoalContribution, getGoals, removeGoalContribution, subscribeToGoals } from '@/services/goal-store';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/services/transaction-categories';
 import { addLocalTransaction, getLocalTransactions, removeLocalTransaction } from '@/services/transaction-store';
 import type { Transaction, TransactionKind } from '@/services/transaction-types';
@@ -202,7 +202,7 @@ export default function TransactionsScreen() {
     setIsHistoryVisible(false);
   };
 
-  const saveTransaction = () => {
+  const saveTransaction = async () => {
     const nextErrors = validateTransaction({
       merchant,
       amountDollars: amount,
@@ -218,15 +218,21 @@ export default function TransactionsScreen() {
     }
     const amountMinor = parseDollarAmountToMinorUnits(amount);
     if (amountMinor === undefined) return;
+    let contributionId: number | undefined;
     if (kind === 'goal') {
       const goal = goals.find((item) => item.id === category);
       if (!goal) {
         setFieldErrors({ category: 'Select a savings goal.' });
         return;
       }
-      addGoalContribution(goal.id, amountMinor);
+      try {
+        contributionId = await addGoalContribution(goal.id, amountMinor);
+      } catch (error) {
+        setFieldErrors({ category: getApiErrorMessage(error, 'Unable to save the goal contribution.') });
+        return;
+      }
     }
-    const newTransaction: Transaction = { id: Date.now(), merchant: merchant.trim(), amount: amountMinor, category: kind === 'goal' ? goals.find((item) => item.id === category)?.name ?? category : category, categoryId: kind === 'goal' ? category : undefined, account, date: date.trim(), timestamp: new Date().toISOString(), notes: notes.trim(), kind };
+    const newTransaction: Transaction = { id: Date.now(), merchant: merchant.trim(), amount: amountMinor, category: kind === 'goal' ? goals.find((item) => item.id === category)?.name ?? category : category, categoryId: kind === 'goal' ? category : undefined, contributionId, account, date: date.trim(), timestamp: new Date().toISOString(), notes: notes.trim(), kind };
     addLocalTransaction(newTransaction);
     setTransactions((current) => sortTransactions([newTransaction, ...current]));
     closeModal();
@@ -247,7 +253,8 @@ export default function TransactionsScreen() {
       if (isLocal) {
         removeLocalTransaction(transaction.id);
         if (transaction.kind === 'goal' && transaction.categoryId) {
-          addGoalContribution(transaction.categoryId, -transaction.amount);
+          if (transaction.contributionId) await removeGoalContribution(transaction.categoryId, transaction.contributionId);
+          else await addGoalContribution(transaction.categoryId, -transaction.amount);
         }
       } else {
         await authenticatedFetch(`/transactions/${transaction.id}/`, { method: 'DELETE' });

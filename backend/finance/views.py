@@ -14,9 +14,9 @@ from rest_framework.decorators import action, api_view, permission_classes, pars
 from rest_framework.response import Response
 from rest_framework.parsers import FormParser, MultiPartParser
 
-from .models import Account, Budget, Category, Goal, RecurringTransaction, Transaction
+from .models import Account, Budget, Category, Goal, GoalContribution, RecurringTransaction, Transaction
 from .permissions import IsOwner
-from .serializers import AccountSerializer, BudgetSerializer, CategorySerializer, GoalSerializer, RecurringTransactionSerializer, TransactionSerializer, UserSerializer
+from .serializers import AccountSerializer, BudgetSerializer, CategorySerializer, GoalContributionSerializer, GoalSerializer, RecurringTransactionSerializer, TransactionSerializer, UserSerializer
 from .services import account_balance_minor, advance_recurring_transaction, budget_performance_report, budget_spent_minor, budget_spent_minor_for_period, category_report, \
         cash_flow_report, financial_summary, goal_progress, monthly_report, import_transactions as import_transactions_service
 
@@ -213,6 +213,30 @@ class GoalViewSet(OwnedModelViewSet):
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
         return Response(self._response_data(self.get_queryset().get(pk=instance.pk)))
+
+    @action(detail=True, methods=["get", "post"], url_path="contributions")
+    def contributions(self, request, pk=None):
+        goal = self.get_object()
+        if request.method == "GET":
+            rows = goal.contributions.order_by("-contributed_on", "-created_at")
+            return Response(GoalContributionSerializer(rows, many=True).data)
+
+        serializer = GoalContributionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        contribution = serializer.save(goal=goal)
+        return Response({
+            "contribution": GoalContributionSerializer(contribution).data,
+            "goal": self._response_data(self.get_queryset().get(pk=goal.pk)),
+        }, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["delete"], url_path=r"contributions/(?P<contribution_id>[^/.]+)")
+    def delete_contribution(self, request, pk=None, contribution_id=None):
+        goal = self.get_object()
+        contribution = goal.contributions.filter(pk=contribution_id).first()
+        if contribution is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        contribution.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 def _month_bounds(month: date) -> tuple[date, date]:

@@ -6,6 +6,7 @@ export type Transaction = {
   amount: number;
   category: string;
   categoryId?: string;
+  contributionId?: number;
   account: string;
   date: string;
   timestamp?: string;

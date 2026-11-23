@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Keyboard,
@@ -11,9 +11,11 @@ import {
   Text,
   TextInput,
   View,
+  ActivityIndicator,
 } from 'react-native';
 import { formatMinorUnitsAsDollars, parseDollarAmountToMinorUnits, required, validatePositiveDollarAmount } from '@/services/validation';
 import { AndroidScreenSafeArea } from '@/components/android-screen-safe-area';
+import { ApiAccount, createAccount, deleteAccount as deleteAccountRequest, getAccounts, getApiErrorMessage, updateAccount } from '@/services/api';
 
 type Account = {
   id: number;
@@ -21,18 +23,22 @@ type Account = {
   type: string;
   balance: number;
   last4: string;
+  persisted: boolean;
 };
 
 const initialAccounts: Account[] = [
-  { id: 1, name: 'Checking Account', type: 'Checking', balance: 425075, last4: '1842' },
-  { id: 2, name: 'Savings Account', type: 'Savings', balance: 630000, last4: '9077' },
-  { id: 3, name: 'Credit Card', type: 'Credit', balance: -24820, last4: '3319' },
+  { id: 1, name: 'Checking Account', type: 'Checking', balance: 425075, last4: '1842', persisted: false },
+  { id: 2, name: 'Savings Account', type: 'Savings', balance: 630000, last4: '9077', persisted: false },
+  { id: 3, name: 'Credit Card', type: 'Credit', balance: -24820, last4: '3319', persisted: false },
 ];
 
 type ModalMode = 'details' | 'edit' | 'add';
 
 export default function AccountsScreen() {
   const [accounts, setAccounts] = useState(initialAccounts);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const isMounted = useRef(true);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [modalMode, setModalMode] = useState<ModalMode>('details');
   const [name, setName] = useState('');
@@ -40,6 +46,26 @@ export default function AccountsScreen() {
   const [balance, setBalance] = useState('');
   const [balanceIsNegative, setBalanceIsNegative] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ name?: string; balance?: string }>({});
+
+  useEffect(() => () => {
+    isMounted.current = false;
+  }, []);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const rows = await getAccounts();
+        if (!isMounted.current) return;
+        setAccounts(rows.filter((row) => !row.is_archived).map(accountFromApi));
+      } catch (error) {
+        // Keep the existing hard-coded accounts available for testing bypass and offline use.
+        if (isMounted.current) setLoadError(getApiErrorMessage(error, 'Unable to load accounts.'));
+      } finally {
+        if (isMounted.current) setIsLoading(false);
+      }
+    };
+    void load();
+  }, []);
 
   const openDetails = (account: Account) => {
     setSelectedAccount(account);
@@ -83,18 +109,21 @@ export default function AccountsScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            setAccounts((currentAccounts) =>
-              currentAccounts.filter((account) => account.id !== selectedAccount.id),
-            );
-            closeModal();
+          onPress: async () => {
+            try {
+              if (selectedAccount.persisted) await deleteAccountRequest(selectedAccount.id);
+              setAccounts((currentAccounts) => currentAccounts.filter((account) => account.id !== selectedAccount.id));
+              closeModal();
+            } catch (error) {
+              Alert.alert('Unable to delete account', getApiErrorMessage(error));
+            }
           },
         },
       ],
     );
   };
 
-  const saveAccount = () => {
+  const saveAccount = async () => {
     const nextErrors = {
       name: required(name, 'Account name'),
       balance: validatePositiveDollarAmount(balance, 'Balance'),
@@ -108,22 +137,23 @@ export default function AccountsScreen() {
     if (absoluteBalance === undefined) return;
     const parsedBalance = balanceIsNegative ? -absoluteBalance : absoluteBalance;
 
-    if (modalMode === 'edit' && selectedAccount) {
-      setAccounts((currentAccounts) =>
-        currentAccounts.map((account) =>
-          account.id === selectedAccount.id
-            ? { ...account, name: name || account.name, type, balance: parsedBalance }
-            : account,
-        ),
-      );
-    } else {
-      setAccounts((currentAccounts) => [
-        ...currentAccounts,
-        { id: Date.now(), name: name || 'New Account', type, balance: parsedBalance, last4: '0000' },
-      ]);
-    }
+    const payload = {
+      name: name.trim() || 'New Account',
+      account_type: accountTypeForApi(type),
+      opening_balance_minor: parsedBalance,
+    } as const;
 
-    closeModal();
+    try {
+      const saved = modalMode === 'edit' && selectedAccount?.persisted
+        ? await updateAccount(selectedAccount.id, payload)
+        : await createAccount(payload);
+      setAccounts((currentAccounts) => modalMode === 'edit' && selectedAccount
+        ? currentAccounts.map((account) => account.id === selectedAccount.id ? accountFromApi(saved) : account)
+        : [...currentAccounts, accountFromApi(saved)]);
+      closeModal();
+    } catch (error) {
+      Alert.alert('Unable to save account', getApiErrorMessage(error));
+    }
   };
 
   const modalTitle = modalMode === 'add' ? 'Add Account' : modalMode === 'edit' ? 'Edit Account' : 'Account Details';
@@ -141,6 +171,8 @@ export default function AccountsScreen() {
           </Pressable>
         </View>
 
+        {isLoading ? <ActivityIndicator color="#2563eb" /> : null}
+        {loadError ? <Text style={styles.loadError}>{loadError}</Text> : null}
         {accounts.map((account) => (
           <Pressable
             key={account.id}
@@ -279,6 +311,26 @@ function formatCurrency(value: number) {
   return `${value < 0 ? '-' : ''}${formatMinorUnitsAsDollars(Math.abs(value))}`;
 }
 
+function accountFromApi(account: ApiAccount): Account {
+  return {
+    id: account.id,
+    name: account.name,
+    type: accountTypeFromApi(account.account_type),
+    balance: account.balance_minor ?? account.opening_balance_minor,
+    last4: '0000',
+    persisted: true,
+  };
+}
+
+function accountTypeFromApi(type: ApiAccount['account_type']): string {
+  return type === 'cash' ? 'Cash' : type[0].toUpperCase() + type.slice(1);
+}
+
+function accountTypeForApi(type: string): ApiAccount['account_type'] {
+  const normalized = type.toLowerCase();
+  return normalized === 'checking' || normalized === 'savings' || normalized === 'credit' ? normalized : 'other';
+}
+
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#f8fafc' },
   container: { padding: 24, paddingBottom: 48 },
@@ -325,4 +377,5 @@ const styles = StyleSheet.create({
   deleteButton: { borderWidth: 1, borderColor: '#dc2626', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 12 },
   deleteButtonText: { color: '#dc2626', fontWeight: 'bold' },
   fieldError: { color: '#b91c1c', marginTop: 4 },
+  loadError: { color: '#b45309', marginBottom: 12 },
 });

@@ -1,4 +1,4 @@
-import { useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -16,7 +16,8 @@ import {
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatMinorUnitsAsDollars, parseDollarAmountToMinorUnits, validatePositiveDollarAmount } from '@/services/validation';
-import { addGoal, deleteGoal, getGoals, subscribeToGoals, type SavingsGoal } from '@/services/goal-store';
+import { createPersistedGoal, deletePersistedGoal, getGoals, loadGoals, subscribeToGoals, type SavingsGoal } from '@/services/goal-store';
+import { getApiErrorMessage } from '@/services/api';
 import { AndroidScreenSafeArea } from '@/components/android-screen-safe-area';
 
 const formatCurrency = (amount: number) => formatMinorUnitsAsDollars(amount);
@@ -31,6 +32,10 @@ export default function GoalsScreen() {
   const [deadline, setDeadline] = useState('');
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    void loadGoals().catch((loadError) => setError(getApiErrorMessage(loadError, 'Unable to load savings goals.')));
+  }, []);
+
   const totals = useMemo(() => {
     const savedAmount = goals.reduce((total, goal) => total + goal.saved, 0);
     const targetAmount = goals.reduce((total, goal) => total + goal.target, 0);
@@ -41,7 +46,7 @@ export default function GoalsScreen() {
     setName(''); setTarget(''); setSaved(''); setDeadline(''); setError(''); setIsModalVisible(true);
   };
   const closeModal = () => { Keyboard.dismiss(); setIsModalVisible(false); };
-  const createGoal = () => {
+  const createGoal = async () => {
     const trimmedName = name.trim();
     const targetAmount = parseDollarAmountToMinorUnits(target);
     const savedAmount = saved.trim() ? parseDollarAmountToMinorUnits(saved, true) : 0;
@@ -49,17 +54,18 @@ export default function GoalsScreen() {
       setError(validatePositiveDollarAmount(target, 'Target amount') ?? 'Enter a valid saved amount up to the target.');
       return;
     }
-    addGoal({
-      id: `${trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`,
-      name: trimmedName, saved: savedAmount, target: targetAmount, deadline: deadline.trim() || 'No deadline', color: '#4D9DE0', icon: trimmedName.slice(0, 2).toUpperCase(),
-    });
-    closeModal();
+    try {
+      await createPersistedGoal({ name: trimmedName, saved: savedAmount, target: targetAmount, deadline: deadline.trim() });
+      closeModal();
+    } catch (createError) {
+      setError(getApiErrorMessage(createError, 'Unable to create savings goal.'));
+    }
   };
 
   const confirmDeleteGoal = (goal: SavingsGoal) => {
     Alert.alert('Delete savings goal?', `Remove “${goal.name}” and its progress?`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteGoal(goal.id) },
+      { text: 'Delete', style: 'destructive', onPress: () => void deletePersistedGoal(goal).catch((deleteError) => setError(getApiErrorMessage(deleteError, 'Unable to delete savings goal.'))) },
     ]);
   };
 

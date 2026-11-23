@@ -3,6 +3,7 @@ from rest_framework import serializers
 import re
 
 from .models import Account, Budget, Category, Goal, GoalContribution, RecurringTransaction, Transaction
+from .services import account_balance_minor
 
 User = get_user_model()
 _CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
@@ -26,10 +27,15 @@ def _validate_owned(value, user, field_name):
 
 
 class AccountSerializer(serializers.ModelSerializer):
+    balance_minor = serializers.SerializerMethodField()
+
     class Meta:
         model = Account
-        fields = ["id", "name", "account_type", "currency", "opening_balance_minor", "is_archived", "created_at", "updated_at"]
+        fields = ["id", "name", "account_type", "currency", "opening_balance_minor", "balance_minor", "is_archived", "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def get_balance_minor(self, account):
+        return account_balance_minor(account)
 
     def validate_name(self, value):
         value = value.strip()
@@ -117,7 +123,7 @@ class GoalContributionSerializer(serializers.ModelSerializer):
     class Meta:
         model = GoalContribution
         fields = ["id", "goal", "amount_minor", "contributed_on", "created_at", "updated_at"]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = ["id", "goal", "created_at", "updated_at"]
 
 
 class GoalSerializer(serializers.ModelSerializer):

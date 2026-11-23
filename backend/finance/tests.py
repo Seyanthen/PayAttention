@@ -473,6 +473,19 @@ class FinanceApiTests(APITestCase):
         self.assertEqual(response.data[0]["progress_percent"], 35.0)
         self.assertEqual(self.client.get(reverse("goal-detail", args=[other_goal.id])).status_code, 404)
 
+    def test_goal_contributions_can_be_created_and_deleted_for_owned_goal(self):
+        goal = Goal.objects.create(owner=self.user, name="Emergency fund", target_amount_minor=10000)
+        response = self.client.post(reverse("goal-contributions", args=[goal.id]), {
+            "amount_minor": 3500,
+            "contributed_on": "2026-01-01",
+        }, format="json")
+        self.assertEqual(response.status_code, 201)
+        contribution_id = response.data["contribution"]["id"]
+        self.assertEqual(response.data["goal"]["current_amount_minor"], 3500)
+        delete_response = self.client.delete(reverse("goal-delete-contribution", args=[goal.id, contribution_id]))
+        self.assertEqual(delete_response.status_code, 204)
+        self.assertFalse(GoalContribution.objects.filter(pk=contribution_id).exists())
+
     def test_protected_reporting_and_export_endpoints_require_authentication(self):
         self.client.force_authenticate(user=None)
         for url in (

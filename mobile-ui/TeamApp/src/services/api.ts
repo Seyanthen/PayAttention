@@ -240,6 +240,128 @@ export function authenticatedGet(path: string, options: Omit<RequestInit, 'metho
   return authenticatedFetch(path, { ...options, method: 'GET' });
 }
 
+export type ApiAccount = {
+  id: number;
+  name: string;
+  account_type: 'cash' | 'checking' | 'savings' | 'credit' | 'other';
+  currency: string;
+  opening_balance_minor: number;
+  balance_minor?: number;
+  is_archived: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export async function getAccounts(): Promise<ApiAccount[]> {
+  const response = await authenticatedGet('/accounts/');
+  const rows: unknown = await response.json();
+  if (!Array.isArray(rows)) {
+    throw new ApiError('The service returned an invalid response. Please try again.', 'invalid_response', { retryable: false });
+  }
+  return rows as ApiAccount[];
+}
+
+export async function createAccount(payload: Pick<ApiAccount, 'name' | 'account_type' | 'opening_balance_minor'>): Promise<ApiAccount> {
+  const response = await authenticatedFetch('/accounts/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...payload, currency: 'USD' }),
+  });
+  return response.json() as Promise<ApiAccount>;
+}
+
+export async function updateAccount(id: number, payload: Pick<ApiAccount, 'name' | 'account_type' | 'opening_balance_minor'>): Promise<ApiAccount> {
+  const response = await authenticatedFetch(`/accounts/${id}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return response.json() as Promise<ApiAccount>;
+}
+
+export async function deleteAccount(id: number): Promise<void> {
+  await authenticatedFetch(`/accounts/${id}/`, { method: 'DELETE' });
+}
+
+export type FinancialSummary = {
+  period_start: string;
+  period_end: string;
+  by_category: { category_id: number | null; category_name: string | null; total_expenses_minor?: number; total_minor?: number }[];
+  total_balance_minor: number;
+  total_assets_minor: number;
+  total_income_minor: number;
+  total_expenses_minor: number;
+  monthly_cash_flow_minor: number;
+};
+
+export type MonthlyReport = {
+  period_start: string;
+  period_end: string;
+  months: { month: string; income_minor: number; expenses_minor: number; net_cash_flow_minor: number }[];
+};
+
+export async function getCurrentMonthSummary(): Promise<FinancialSummary> {
+  const response = await authenticatedGet('/summary/current-month/');
+  return response.json() as Promise<FinancialSummary>;
+}
+
+export async function getMonthlyReport(start: string, end: string): Promise<MonthlyReport> {
+  const response = await authenticatedGet(`/reports/monthly/?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+  return response.json() as Promise<MonthlyReport>;
+}
+
+export type ApiGoal = {
+  id: number;
+  name: string;
+  target_amount_minor: number;
+  current_amount_minor: number;
+  remaining_amount_minor: number;
+  progress_percent: number;
+  target_date: string | null;
+  currency: string;
+  is_completed: boolean;
+};
+
+export type ApiGoalContribution = {
+  id: number;
+  goal: number;
+  amount_minor: number;
+  contributed_on: string;
+};
+
+export async function getGoals(): Promise<ApiGoal[]> {
+  const response = await authenticatedGet('/goals/');
+  const rows: unknown = await response.json();
+  if (!Array.isArray(rows)) throw new ApiError('The service returned an invalid response. Please try again.', 'invalid_response', { retryable: false });
+  return rows as ApiGoal[];
+}
+
+export async function createGoal(payload: { name: string; target_amount_minor: number; target_date?: string | null }): Promise<ApiGoal> {
+  const response = await authenticatedFetch('/goals/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...payload, currency: 'USD' }),
+  });
+  return response.json() as Promise<ApiGoal>;
+}
+
+export async function deleteGoal(id: number): Promise<void> {
+  await authenticatedFetch(`/goals/${id}/`, { method: 'DELETE' });
+}
+
+export async function createGoalContribution(goalId: number, amountMinor: number, contributedOn: string): Promise<{ contribution: ApiGoalContribution; goal: ApiGoal }> {
+  const response = await authenticatedFetch(`/goals/${goalId}/contributions/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount_minor: amountMinor, contributed_on: contributedOn }),
+  });
+  return response.json() as Promise<{ contribution: ApiGoalContribution; goal: ApiGoal }>;
+}
+
+export async function deleteGoalContribution(goalId: number, contributionId: number): Promise<void> {
+  await authenticatedFetch(`/goals/${goalId}/contributions/${contributionId}/`, { method: 'DELETE' });
+}
+
 export type RecurringTransaction = {
   id: number;
   name: string;

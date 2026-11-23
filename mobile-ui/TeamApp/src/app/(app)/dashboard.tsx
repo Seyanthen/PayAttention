@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { router } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
 import {
     ActivityIndicator,
     Pressable,
@@ -9,8 +9,8 @@ import {
     View,
 } from "react-native";
 
-import { logout } from "@/services/auth";
-import { getApiErrorMessage, getRecurringTransactions, type RecurringTransaction } from "@/services/api";
+import { isMockAuthenticated, logout } from "@/services/auth";
+import { getApiErrorMessage, getCurrentMonthSummary, getMonthlyReport, getRecurringTransactions, type FinancialSummary, type RecurringTransaction } from "@/services/api";
 import RecurringTransactionsModal from "@/components/RecurringTransactionsModal";
 import { AndroidScreenSafeArea } from '@/components/android-screen-safe-area';
 
@@ -40,6 +40,38 @@ export default function DashboardScreen() {
     const [recurringError, setRecurringError] = useState("");
     const [recurringModalVisible, setRecurringModalVisible] = useState(false);
     const [recurringModalMode, setRecurringModalMode] = useState<"list" | "create">("list");
+    const [summary, setSummary] = useState<FinancialSummary | null>(null);
+    const [monthlySpendingData, setMonthlySpendingData] = useState(monthlySpending);
+    const [spendingCategoriesData, setSpendingCategoriesData] = useState(spendingCategories);
+    const [summaryLoading, setSummaryLoading] = useState(true);
+    const [summaryError, setSummaryError] = useState("");
+
+    const loadSummary = useCallback(async () => {
+        if (isMockAuthenticated()) {
+            setSummaryLoading(false);
+            return;
+        }
+
+        setSummaryLoading(true); setSummaryError("");
+        try {
+            const current = await getCurrentMonthSummary();
+            if (!isMounted.current) return;
+            setSummary(current);
+            setSpendingCategoriesData(toCategoryData(current));
+            try {
+                const end = new Date();
+                const start = new Date(end.getFullYear(), end.getMonth() - 5, 1);
+                const monthly = await getMonthlyReport(formatDate(start), formatDate(end));
+                if (isMounted.current) setMonthlySpendingData(monthly.months.map((month) => ({ month: formatMonth(month.month), amount: month.expenses_minor })));
+            } catch {
+                // The primary balance and current-month metrics remain usable if the trend report is unavailable.
+            }
+        } catch (error) {
+            if (isMounted.current) setSummaryError(getApiErrorMessage(error, "Unable to load dashboard data."));
+        } finally {
+            if (isMounted.current) setSummaryLoading(false);
+        }
+    }, []);
 
     async function loadRecurring() {
         setRecurringLoading(true); setRecurringError("");
@@ -56,6 +88,11 @@ export default function DashboardScreen() {
         const timer = setTimeout(() => { void loadRecurring(); }, 0);
         return () => clearTimeout(timer);
     }, []);
+
+    useFocusEffect(useCallback(() => {
+        const timer = setTimeout(() => { void loadSummary(); }, 0);
+        return () => clearTimeout(timer);
+    }, [loadSummary]));
 
     async function handleLogout() {
         if (isLoggingOut) return;
@@ -87,26 +124,28 @@ export default function DashboardScreen() {
 
                 <View style={styles.balanceCard}>
                     <Text style={styles.cardLabel}>Total Balance</Text>
-                    <Text style={styles.balance}>$8,452</Text>
+                    <Text style={styles.balance}>{summaryLoading ? "Loading…" : formatCurrency(summary?.total_balance_minor ?? 845200)}</Text>
                 </View>
 
                 <View style={styles.monthlyCard}>
                     <View style={styles.monthHeader}>
-                        <Text style={styles.monthTitle}>September</Text>
+                        <Text style={styles.monthTitle}>{summary ? formatMonthTitle(summary.period_start) : "September"}</Text>
                         <Text style={styles.monthCaption}>Monthly overview</Text>
                     </View>
-                    <SummaryRow label="Income" amount="$3,400" amountStyle={styles.incomeText} />
-                    <SummaryRow label="Expenses" amount="$2,175" amountStyle={styles.expenseText} />
+                    <SummaryRow label="Income" amount={formatCurrency(summary?.total_income_minor ?? 340000)} amountStyle={styles.incomeText} />
+                    <SummaryRow label="Expenses" amount={formatCurrency(summary?.total_expenses_minor ?? 217500)} amountStyle={styles.expenseText} />
                     <View style={styles.divider} />
-                    <SummaryRow label="Net" amount="+$1,225" amountStyle={styles.netText} />
+                    <SummaryRow label="Net" amount={formatCurrency(summary?.monthly_cash_flow_minor ?? 122500, true)} amountStyle={styles.netText} />
                 </View>
+
+                {summaryError ? <Text style={styles.message}>{summaryError}</Text> : null}
 
                 <View style={styles.chartCard} accessibilityLabel="Spending by category chart">
                     <View style={styles.chartHeader}>
                         <Text style={styles.chartTitle}>Spending by category</Text>
                         <Text style={styles.chartCaption}>September expenses</Text>
                     </View>
-                    {spendingCategories.map((category) => (
+                    {spendingCategoriesData.map((category) => (
                         <View key={category.name} style={styles.categoryRow}>
                             <View style={styles.categoryLabelRow}>
                                 <View style={[styles.categoryDot, { backgroundColor: category.color }]} />
@@ -126,11 +165,11 @@ export default function DashboardScreen() {
                         <Text style={styles.chartCaption}>Total expenses</Text>
                     </View>
                     <View style={styles.trendChart}>
-                        {monthlySpending.map((entry) => (
+                    {monthlySpendingData.map((entry) => (
                             <View key={entry.month} style={styles.trendColumn}>
-                                <Text style={styles.trendAmount}>${(entry.amount / 1000).toFixed(1)}k</Text>
+                                <Text style={styles.trendAmount}>{formatCompactCurrency(entry.amount)}</Text>
                                 <View style={styles.trendBarTrack}>
-                                    <View style={[styles.trendBar, { height: `${(entry.amount / 2310) * 100}%` }]} />
+                                <View style={[styles.trendBar, { height: `${Math.max(...monthlySpendingData.map((item) => item.amount), 1) ? (entry.amount / Math.max(...monthlySpendingData.map((item) => item.amount), 1)) * 100 : 0}%` }]} />
                                 </View>
                                 <Text style={styles.trendMonth}>{entry.month}</Text>
                             </View>
@@ -176,6 +215,39 @@ function SummaryRow({ label, amount, amountStyle }: { label: string; amount: str
             <Text style={[styles.summaryAmount, amountStyle]}>{amount}</Text>
         </View>
     );
+}
+
+function formatCurrency(minor: number, includePlus = false) {
+    const dollars = Math.abs(minor / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+    return `${minor < 0 ? "-" : includePlus && minor > 0 ? "+" : ""}${dollars}`;
+}
+
+function formatCompactCurrency(minor: number) {
+    return `$${(minor / 100000).toFixed(1)}k`;
+}
+
+function formatDate(value: Date) {
+    return value.toISOString().slice(0, 10);
+}
+
+function formatMonth(value: string) {
+    const [year, month] = value.split("-").map(Number);
+    return new Date(year, month - 1, 1).toLocaleString("en-US", { month: "short" });
+}
+
+function formatMonthTitle(value: string) {
+    const [year, month] = value.split("-").map(Number);
+    return new Date(year, month - 1, 1).toLocaleString("en-US", { month: "long" });
+}
+
+function toCategoryData(value: FinancialSummary) {
+    const colors = ["#2563eb", "#14b8a6", "#f59e0b", "#8b5cf6", "#94a3b8"];
+    const total = value.total_expenses_minor || 1;
+    return value.by_category.map((category, index) => ({
+        name: category.category_name || "Uncategorized",
+        percentage: Math.round(((category.total_minor ?? category.total_expenses_minor ?? 0) / total) * 100),
+        color: colors[index % colors.length],
+    }));
 }
 
 const styles = StyleSheet.create({
