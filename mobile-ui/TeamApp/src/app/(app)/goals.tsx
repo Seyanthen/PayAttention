@@ -5,7 +5,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,6 +17,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatMinorUnitsAsDollars, parseDollarAmountToMinorUnits, validatePositiveDollarAmount } from '@/services/validation';
 import { addGoal, deleteGoal, getGoals, subscribeToGoals, type SavingsGoal } from '@/services/goal-store';
+import { AndroidScreenSafeArea } from '@/components/android-screen-safe-area';
 
 const formatCurrency = (amount: number) => formatMinorUnitsAsDollars(amount);
 
@@ -64,7 +64,7 @@ export default function GoalsScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+    <AndroidScreenSafeArea style={[styles.safeArea, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View><Text style={[styles.eyebrow, { color: theme.textSecondary }]}>YOUR PLAN</Text><Text style={[styles.title, { color: theme.text }]}>Savings goals</Text></View>
@@ -103,7 +103,7 @@ export default function GoalsScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </SafeAreaView>
+    </AndroidScreenSafeArea>
   );
 }
 

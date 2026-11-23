@@ -3,7 +3,6 @@ import { router } from "expo-router";
 import {
     ActivityIndicator,
     Pressable,
-    SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
@@ -13,6 +12,7 @@ import {
 import { logout } from "@/services/auth";
 import { getApiErrorMessage, getRecurringTransactions, type RecurringTransaction } from "@/services/api";
 import RecurringTransactionsModal from "@/components/RecurringTransactionsModal";
+import { AndroidScreenSafeArea } from '@/components/android-screen-safe-area';
 
 const spendingCategories = [
     { name: "Housing", percentage: 42, color: "#2563eb" },
@@ -78,7 +78,7 @@ export default function DashboardScreen() {
     }
 
     return (
-        <SafeAreaView style={styles.safeArea}>
+        <AndroidScreenSafeArea style={styles.safeArea}>
             <ScrollView contentContainerStyle={styles.container}>
                 <View style={styles.header}>
                     <Text style={styles.title}>Dashboard</Text>
@@ -165,7 +165,7 @@ export default function DashboardScreen() {
                 onClose={() => setRecurringModalVisible(false)}
                 onChanged={() => void loadRecurring()}
             />
-        </SafeAreaView>
+        </AndroidScreenSafeArea>
     );
 }
 

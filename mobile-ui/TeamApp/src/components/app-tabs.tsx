@@ -9,7 +9,9 @@ export default function AppTabs() {
     <NativeTabs
       backgroundColor={colors.background}
       indicatorColor={colors.backgroundElement}
-      labelStyle={{ selected: { color: colors.text } }}>
+      tintColor="#000000"
+      labelVisibilityMode="labeled"
+      labelStyle={{ default: { color: '#000000' }, selected: { color: '#000000' } }}>
 
       {/* <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
@@ -39,7 +41,7 @@ export default function AppTabs() {
       <NativeTabs.Trigger name="dashboard">
         <NativeTabs.Trigger.Label>Dashboard</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/explore.png')}
+          src={require('@/assets/images/tabIcons/home.png')}
           renderingMode="template"
         />
       </NativeTabs.Trigger>
@@ -47,32 +49,32 @@ export default function AppTabs() {
       <NativeTabs.Trigger name="accounts">
         <NativeTabs.Trigger.Label>Accounts</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/explore.png')}
-          renderingMode="template"
+          sf="key.fill"
+          md="key_vertical"
         />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="budget">
         <NativeTabs.Trigger.Label>Budget</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/explore.png')}
-          renderingMode="template"
+          sf="dollarsign"
+          md="attach_money"
         />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="goals">
         <NativeTabs.Trigger.Label>Goals</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/explore.png')}
-          renderingMode="template"
+          sf="checklist"
+          md="add_task"
         />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="transactions">
         <NativeTabs.Trigger.Label>Transactions</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/explore.png')}
-          renderingMode="template"
+          sf="arrow.up.arrow.down"
+          md="swap_vert"
         />
       </NativeTabs.Trigger>
 

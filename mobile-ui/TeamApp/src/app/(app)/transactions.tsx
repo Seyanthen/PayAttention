@@ -6,7 +6,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   Share,
   ScrollView,
   StyleSheet,
@@ -22,6 +21,7 @@ import { addGoalContribution, getGoals, subscribeToGoals } from '@/services/goal
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/services/transaction-categories';
 import { addLocalTransaction, getLocalTransactions, removeLocalTransaction } from '@/services/transaction-store';
 import type { Transaction, TransactionKind } from '@/services/transaction-types';
+import { AndroidScreenSafeArea } from '@/components/android-screen-safe-area';
 
 type ApiTransaction = {
   id: number;
@@ -295,7 +295,7 @@ export default function TransactionsScreen() {
   const openImportExport = () => setIsImportExportVisible(true);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <AndroidScreenSafeArea style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <View>
@@ -304,7 +304,7 @@ export default function TransactionsScreen() {
           </View>
           <View style={styles.headerActions}>
             <Pressable accessibilityRole="button" accessibilityLabel="Add transaction" style={styles.addButton} onPress={openAdd}><Text style={styles.addButtonText}>+ Add</Text></Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Import or export transactions" style={styles.secondaryHeaderButton} onPress={openImportExport}><SymbolView name="doc.text" size={20} tintColor="#2563eb" /></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Import or export transactions" style={styles.secondaryHeaderButton} onPress={openImportExport}><SymbolView name={{ ios: 'doc.text', android: 'description', web: 'description' }} size={20} tintColor="#2563eb" /></Pressable>
           </View>
         </View>
 
@@ -433,7 +433,7 @@ export default function TransactionsScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </AndroidScreenSafeArea>
   );
 }
 

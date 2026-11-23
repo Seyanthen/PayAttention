@@ -6,7 +6,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { formatMinorUnitsAsDollars, parseDollarAmountToMinorUnits, required, validatePositiveDollarAmount } from '@/services/validation';
+import { AndroidScreenSafeArea } from '@/components/android-screen-safe-area';
 
 type Account = {
   id: number;
@@ -129,7 +129,7 @@ export default function AccountsScreen() {
   const modalTitle = modalMode === 'add' ? 'Add Account' : modalMode === 'edit' ? 'Edit Account' : 'Account Details';
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <AndroidScreenSafeArea style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.header}>
           <View>
@@ -271,7 +271,7 @@ export default function AccountsScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
-    </SafeAreaView>
+    </AndroidScreenSafeArea>
   );
 }
 
