@@ -22,6 +22,7 @@ import { addLocalTransaction, getLocalTransactions, removeLocalTransaction } fro
 import type { Transaction, TransactionKind } from '@/services/transaction-types';
 import { AndroidScreenSafeArea } from '@/components/android-screen-safe-area';
 import { addBudgetSpent, getActiveBudgetMonth, getBudgets, subscribeToBudgets } from '@/services/budget-store';
+import { adjustAccountBalance, getAccounts as getSharedAccounts, subscribeToAccounts } from '@/services/account-store';
 
 type ApiTransaction = {
   id: number;
@@ -54,6 +55,7 @@ export default function TransactionsScreen() {
   const isMounted = useRef(true);
   const goals = useSyncExternalStore(subscribeToGoals, getGoals, getGoals);
   const budgets = useSyncExternalStore(subscribeToBudgets, getBudgets, getBudgets);
+  const sharedAccounts = useSyncExternalStore(subscribeToAccounts, getSharedAccounts, getSharedAccounts);
   const [transactions, setTransactions] = useState(initialTransactions);
   const [accounts, setAccounts] = useState<Lookup[]>([]);
   const [filters, setFilters] = useState<TransactionFilters>({ search: '', account: '', category: '', transactionType: '', startDate: '', endDate: '', minAmountDollars: '', maxAmountDollars: '' });
@@ -192,6 +194,7 @@ export default function TransactionsScreen() {
     if (kind === 'goal') return goals.map((goal) => ({ id: goal.id, name: goal.name }));
     return kind === 'income' ? [{ id: 'Other', name: 'Other' }] : [...budgetCategoryOptions, { id: 'Other', name: 'Other' }];
   }, [budgetCategoryOptions, goals, kind]);
+  const accountOptions = sharedAccounts.map((item) => item.name);
 
   const openAdd = () => {
     setMerchant(''); setAmount(''); setCategory('Other'); setAccount('Checking Account'); setKind('expense'); setDate(formatToday()); setNotes(''); setTransferAccount(''); setFieldErrors({}); setIsAddVisible(true);
@@ -237,7 +240,9 @@ export default function TransactionsScreen() {
     }
     if (kind === 'expense' && category !== 'Other') addBudgetSpent(getActiveBudgetMonth(), category, amountMinor);
     const newTransaction: Transaction = { id: Date.now(), merchant: merchant.trim(), amount: amountMinor, category: kind === 'goal' ? goals.find((item) => item.id === category)?.name ?? category : category, categoryId: kind === 'goal' ? category : undefined, contributionId, account, date: date.trim(), timestamp: new Date().toISOString(), notes: notes.trim(), kind };
+    newTransaction.transferAccount = kind === 'transfer' ? transferAccount : undefined;
     addLocalTransaction(newTransaction);
+    applyAccountBalanceChanges(newTransaction, 1);
     setTransactions((current) => sortTransactions([newTransaction, ...current]));
     closeModal();
   };
@@ -256,6 +261,7 @@ export default function TransactionsScreen() {
       const isLocal = getLocalTransactions().some((item) => item.id === transaction.id);
       if (isLocal) {
         removeLocalTransaction(transaction.id);
+        applyAccountBalanceChanges(transaction, -1);
         if (transaction.kind === 'expense' && transaction.category !== 'Other') addBudgetSpent(getActiveBudgetMonth(), transaction.category, -transaction.amount);
         if (transaction.kind === 'goal' && transaction.categoryId) {
           if (transaction.contributionId) await removeGoalContribution(transaction.categoryId, transaction.contributionId);
@@ -415,9 +421,9 @@ export default function TransactionsScreen() {
                   <Text style={styles.inputLabel}>Type</Text>
                   <View style={styles.optionRow}>{(['expense', 'income', 'transfer', 'goal'] as TransactionKind[]).map((option) => <Pressable key={option} style={[styles.optionButton, kind === option && styles.selectedOption]} onPress={() => { setKind(option); setCategory(option === 'goal' ? '' : option === 'income' ? 'Income' : 'Other'); setFieldErrors((current) => ({ ...current, category: undefined, transferAccount: undefined })); }}><Text style={[styles.optionText, kind === option && styles.selectedOptionText]}>{option[0].toUpperCase() + option.slice(1)}</Text></Pressable>)}</View>
                   {kind !== 'transfer' ? <><Text style={styles.inputLabel}>{kind === 'goal' ? 'Savings goal' : 'Category'}</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>{addCategoryOptions.map((option) => <Pressable key={option.id} style={[styles.categoryButton, category === option.id && styles.selectedOption]} onPress={() => { setCategory(option.id); setFieldErrors((current) => ({ ...current, category: undefined })); }}><Text style={[styles.optionText, category === option.id && styles.selectedOptionText]}>{option.name}</Text></Pressable>)}</ScrollView>{fieldErrors.category ? <Text style={styles.fieldError}>{fieldErrors.category}</Text> : null}</> : <><Text style={styles.inputLabel}>Destination account</Text><View style={styles.optionRow}>{['Checking Account', 'Savings Account', 'Credit Card'].filter((option) => option !== account).map((option) => <Pressable key={option} style={[styles.accountButton, transferAccount === option && styles.selectedOption]} onPress={() => { setTransferAccount(option); setFieldErrors((current) => ({ ...current, transferAccount: undefined })); }}><Text style={[styles.optionText, transferAccount === option && styles.selectedOptionText]}>{option.replace(' Account', '')}</Text></Pressable>)}</View>{fieldErrors.transferAccount ? <Text style={styles.fieldError}>{fieldErrors.transferAccount}</Text> : null}</>}
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>{addCategoryOptions.map((option) => <Pressable key={option.id} style={[styles.categoryButton, category === option.id && styles.selectedOption]} onPress={() => { setCategory(option.id); setFieldErrors((current) => ({ ...current, category: undefined })); }}><Text style={[styles.optionText, category === option.id && styles.selectedOptionText]}>{option.name}</Text></Pressable>)}</ScrollView>{fieldErrors.category ? <Text style={styles.fieldError}>{fieldErrors.category}</Text> : null}</> : <><Text style={styles.inputLabel}>Destination account</Text><View style={styles.optionRow}>{accountOptions.filter((option) => option !== account).map((option) => <Pressable key={option} style={[styles.accountButton, transferAccount === option && styles.selectedOption]} onPress={() => { setTransferAccount(option); setFieldErrors((current) => ({ ...current, transferAccount: undefined })); }}><Text style={[styles.optionText, transferAccount === option && styles.selectedOptionText]}>{option.replace(' Account', '')}</Text></Pressable>)}</View>{fieldErrors.transferAccount ? <Text style={styles.fieldError}>{fieldErrors.transferAccount}</Text> : null}</>}
                   <Text style={styles.inputLabel}>Account</Text>
-                  <View style={styles.optionRow}>{['Checking Account', 'Savings Account', 'Credit Card'].map((option) => <Pressable key={option} style={[styles.accountButton, account === option && styles.selectedOption]} onPress={() => setAccount(option)}><Text style={[styles.optionText, account === option && styles.selectedOptionText]}>{option.replace(' Account', '')}</Text></Pressable>)}</View>
+                  <View style={styles.optionRow}>{accountOptions.map((option) => <Pressable key={option} style={[styles.accountButton, account === option && styles.selectedOption]} onPress={() => setAccount(option)}><Text style={[styles.optionText, account === option && styles.selectedOptionText]}>{option.replace(' Account', '')}</Text></Pressable>)}</View>
                   <Text style={styles.inputLabel}>Notes (optional)</Text><TextInput style={[styles.input, styles.notesInput]} value={notes} onChangeText={setNotes} placeholder="Add a note" multiline />
                   <Pressable style={styles.primaryButton} onPress={saveTransaction}><Text style={styles.primaryButtonText}>Add Transaction</Text></Pressable>
                 </ScrollView>
@@ -455,6 +461,18 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 function formatCurrency(value: number) { return `$${(Math.abs(value) / 100).toFixed(2)}`; }
 function formatToday() { return new Date().toISOString().slice(0, 10); }
+
+function applyAccountBalanceChanges(transaction: Transaction, multiplier: 1 | -1) {
+  const amount = transaction.amount * multiplier;
+  if (transaction.kind === 'transfer') {
+    adjustAccountBalance(transaction.account, -amount);
+    if (transaction.transferAccount) adjustAccountBalance(transaction.transferAccount, amount);
+  } else if (transaction.kind === 'income') {
+    adjustAccountBalance(transaction.account, amount);
+  } else {
+    adjustAccountBalance(transaction.account, -amount);
+  }
+}
 function sortTransactions(items: Transaction[]) {
   return [...items].sort((a, b) => b.date.localeCompare(a.date) || (b.timestamp ?? '').localeCompare(a.timestamp ?? '') || b.id - a.id);
 }

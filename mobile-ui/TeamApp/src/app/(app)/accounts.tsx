@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   Alert,
   Keyboard,
@@ -16,30 +16,16 @@ import {
 import { formatMinorUnitsAsDollars, parseDollarAmountToMinorUnits, required, validatePositiveDollarAmount } from '@/services/validation';
 import { AndroidScreenSafeArea } from '@/components/android-screen-safe-area';
 import { ApiAccount, createAccount, deleteAccount as deleteAccountRequest, getAccounts, getApiErrorMessage, updateAccount } from '@/services/api';
-
-type Account = {
-  id: number;
-  name: string;
-  type: string;
-  balance: number;
-  last4: string;
-  persisted: boolean;
-};
-
-const initialAccounts: Account[] = [
-  { id: 1, name: 'Checking Account', type: 'Checking', balance: 425075, last4: '1842', persisted: false },
-  { id: 2, name: 'Savings Account', type: 'Savings', balance: 630000, last4: '9077', persisted: false },
-  { id: 3, name: 'Credit Card', type: 'Credit', balance: -24820, last4: '3319', persisted: false },
-];
+import { addAccount, getAccounts as getSharedAccounts, removeAccount, replaceAccount, replaceAccounts, subscribeToAccounts, type SharedAccount } from '@/services/account-store';
 
 type ModalMode = 'details' | 'edit' | 'add';
 
 export default function AccountsScreen() {
-  const [accounts, setAccounts] = useState(initialAccounts);
+  const accounts = useSyncExternalStore(subscribeToAccounts, getSharedAccounts, getSharedAccounts);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const isMounted = useRef(true);
-  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<SharedAccount | null>(null);
   const [modalMode, setModalMode] = useState<ModalMode>('details');
   const [name, setName] = useState('');
   const [type, setType] = useState('Checking');
@@ -56,7 +42,7 @@ export default function AccountsScreen() {
       try {
         const rows = await getAccounts();
         if (!isMounted.current) return;
-        setAccounts(rows.filter((row) => !row.is_archived).map(accountFromApi));
+        replaceAccounts(rows.filter((row) => !row.is_archived).map(accountFromApi));
       } catch (error) {
         // Keep the existing hard-coded accounts available for testing bypass and offline use.
         if (isMounted.current) setLoadError(getApiErrorMessage(error, 'Unable to load accounts.'));
@@ -67,12 +53,12 @@ export default function AccountsScreen() {
     void load();
   }, []);
 
-  const openDetails = (account: Account) => {
+  const openDetails = (account: SharedAccount) => {
     setSelectedAccount(account);
     setModalMode('details');
   };
 
-  const openEdit = (account: Account) => {
+  const openEdit = (account: SharedAccount) => {
     setSelectedAccount(account);
     setName(account.name);
     setType(account.type);
@@ -112,7 +98,7 @@ export default function AccountsScreen() {
           onPress: async () => {
             try {
               if (selectedAccount.persisted) await deleteAccountRequest(selectedAccount.id);
-              setAccounts((currentAccounts) => currentAccounts.filter((account) => account.id !== selectedAccount.id));
+              removeAccount(selectedAccount.id);
               closeModal();
             } catch (error) {
               Alert.alert('Unable to delete account', getApiErrorMessage(error));
@@ -147,9 +133,8 @@ export default function AccountsScreen() {
       const saved = modalMode === 'edit' && selectedAccount?.persisted
         ? await updateAccount(selectedAccount.id, payload)
         : await createAccount(payload);
-      setAccounts((currentAccounts) => modalMode === 'edit' && selectedAccount
-        ? currentAccounts.map((account) => account.id === selectedAccount.id ? accountFromApi(saved) : account)
-        : [...currentAccounts, accountFromApi(saved)]);
+      if (modalMode === 'edit' && selectedAccount) replaceAccount(accountFromApi(saved));
+      else addAccount(accountFromApi(saved));
       closeModal();
     } catch (error) {
       Alert.alert('Unable to save account', getApiErrorMessage(error));
@@ -311,7 +296,7 @@ function formatCurrency(value: number) {
   return `${value < 0 ? '-' : ''}${formatMinorUnitsAsDollars(Math.abs(value))}`;
 }
 
-function accountFromApi(account: ApiAccount): Account {
+function accountFromApi(account: ApiAccount): SharedAccount {
   return {
     id: account.id,
     name: account.name,

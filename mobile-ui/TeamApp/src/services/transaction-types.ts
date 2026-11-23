@@ -8,6 +8,7 @@ export type Transaction = {
   categoryId?: string;
   contributionId?: number;
   account: string;
+  transferAccount?: string;
   date: string;
   timestamp?: string;
   notes: string;
