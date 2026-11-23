@@ -5,6 +5,9 @@ import { useEffect, useState } from 'react';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { restoreAuthToken } from '@/services/auth';
+import { loadAccounts } from '@/services/account-store';
+import { loadBudgets } from '@/services/budget-store';
+import { loadLocalTransactions } from '@/services/transaction-store';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -13,7 +16,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     let isMounted = true;
-    restoreAuthToken().finally(() => {
+    Promise.all([restoreAuthToken(), loadAccounts(), loadBudgets(), loadLocalTransactions()]).finally(() => {
       if (isMounted) {
         setIsAuthReady(true);
       }

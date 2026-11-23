@@ -3,7 +3,7 @@ import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 
 import { router } from "expo-router";
 
 import { getApiErrorMessage, login } from "@/services/api";
-import { enableMockAuthentication } from "@/services/auth";
+// import { enableMockAuthentication } from "@/services/auth";
 import { required } from "@/services/validation";
 
 export default function LoginScreen() {
@@ -18,11 +18,11 @@ export default function LoginScreen() {
         isMounted.current = false;
     }, []);
 
-    function handleTestingBypass() {
-        if (enableMockAuthentication()) {
-            router.replace("/(app)/dashboard" as any);
-        }
-    }
+    // function handleTestingBypass() {
+    //     if (enableMockAuthentication()) {
+    //         router.replace("/(app)/dashboard" as any);
+    //     }
+    // }
 
     async function handleLogin() {
         if (isLoading) {
@@ -106,11 +106,11 @@ export default function LoginScreen() {
 
             {message ? <Text style={styles.message}>{message}</Text> : null}
 
-            {__DEV__ ? (
+            {/* {__DEV__ ? (
                 <Pressable style={styles.button} onPress={handleTestingBypass}>
                     <Text style={styles.buttonText}>Testing Bypass</Text>
                 </Pressable>
-            ) : null}
+            ) : null} */}
 
         </View>
     );

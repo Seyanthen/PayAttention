@@ -1,3 +1,5 @@
+import { readPersistedJson, writePersistedJson } from '@/services/persistent-storage';
+
 export type BudgetCategory = {
   id: string;
   name: string;
@@ -10,28 +12,18 @@ export type BudgetCategory = {
 
 export type BudgetMap = Record<string, BudgetCategory[]>;
 
-const initialBudgets: BudgetMap = {
-  September: [
-    { id: 'groceries', name: 'Groceries', spent: 32700, limit: 50000, color: '#4D9DE0', recurring: true },
-    { id: 'restaurants', name: 'Restaurants', spent: 18400, limit: 25000, color: '#E07A5F', recurring: true },
-    { id: 'entertainment', name: 'Entertainment', spent: 14000, limit: 15000, color: '#9B8AFB', recurring: true },
-    { id: 'transportation', name: 'Transportation', spent: 9600, limit: 18000, color: '#55A878', recurring: true },
-  ],
-  October: [
-    { id: 'groceries', name: 'Groceries', spent: 0, limit: 50000, color: '#4D9DE0', recurring: true },
-    { id: 'restaurants', name: 'Restaurants', spent: 0, limit: 25000, color: '#E07A5F', recurring: true },
-    { id: 'entertainment', name: 'Entertainment', spent: 0, limit: 15000, color: '#9B8AFB', recurring: true },
-    { id: 'transportation', name: 'Transportation', spent: 0, limit: 18000, color: '#55A878', recurring: true },
-  ],
-};
+const currentMonth = new Date().toLocaleString('en-US', { month: 'long' });
+const initialBudgets: BudgetMap = { [currentMonth]: [] };
 
 const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const STORAGE_KEY = 'pay-attention.budgets';
 let budgets = initialBudgets;
-let activeBudgetMonth = 'September';
+let activeBudgetMonth = currentMonth;
 const listeners = new Set<() => void>();
 
 function publish(nextBudgets: BudgetMap) {
   budgets = nextBudgets;
+  void writePersistedJson(STORAGE_KEY, budgets);
   listeners.forEach((listener) => listener());
 }
 
@@ -52,6 +44,10 @@ function ensureMonth(month: string, source = budgets) {
 
 export function getBudgets(): BudgetMap { return budgets; }
 export function subscribeToBudgets(listener: () => void): () => void { listeners.add(listener); return () => listeners.delete(listener); }
+export async function loadBudgets(): Promise<void> {
+  const stored = await readPersistedJson<BudgetMap>(STORAGE_KEY);
+  if (stored) { budgets = stored; listeners.forEach((listener) => listener()); }
+}
 export function getActiveBudgetMonth(): string { return activeBudgetMonth; }
 export function setActiveBudgetMonth(month: string) { activeBudgetMonth = month; }
 

@@ -16,7 +16,7 @@ import {
 import { formatMinorUnitsAsDollars, parseDollarAmountToMinorUnits, required, validatePositiveDollarAmount } from '@/services/validation';
 import { AndroidScreenSafeArea } from '@/components/android-screen-safe-area';
 import { ApiAccount, createAccount, deleteAccount as deleteAccountRequest, getAccounts, getApiErrorMessage, updateAccount } from '@/services/api';
-import { addAccount, getAccounts as getSharedAccounts, removeAccount, replaceAccount, replaceAccounts, subscribeToAccounts, type SharedAccount } from '@/services/account-store';
+import { addAccount, getAccounts as getSharedAccounts, hasPersistedAccounts, removeAccount, replaceAccount, replaceAccounts, subscribeToAccounts, type SharedAccount } from '@/services/account-store';
 
 type ModalMode = 'details' | 'edit' | 'add';
 
@@ -42,7 +42,7 @@ export default function AccountsScreen() {
       try {
         const rows = await getAccounts();
         if (!isMounted.current) return;
-        replaceAccounts(rows.filter((row) => !row.is_archived).map(accountFromApi));
+        if (!hasPersistedAccounts()) replaceAccounts(rows.filter((row) => !row.is_archived).map(accountFromApi));
       } catch (error) {
         // Keep the existing hard-coded accounts available for testing bypass and offline use.
         if (isMounted.current) setLoadError(getApiErrorMessage(error, 'Unable to load accounts.'));

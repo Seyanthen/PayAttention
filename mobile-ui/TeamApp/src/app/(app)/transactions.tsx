@@ -72,7 +72,7 @@ export default function TransactionsScreen() {
   const [merchant, setMerchant] = useState('');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('Other');
-  const [account, setAccount] = useState('Checking Account');
+  const [account, setAccount] = useState('');
   const [kind, setKind] = useState<TransactionKind>('expense');
   const [date, setDate] = useState(formatToday());
   const [notes, setNotes] = useState('');
@@ -197,7 +197,7 @@ export default function TransactionsScreen() {
   const accountOptions = sharedAccounts.map((item) => item.name);
 
   const openAdd = () => {
-    setMerchant(''); setAmount(''); setCategory('Other'); setAccount('Checking Account'); setKind('expense'); setDate(formatToday()); setNotes(''); setTransferAccount(''); setFieldErrors({}); setIsAddVisible(true);
+    setMerchant(''); setAmount(''); setCategory('Other'); setAccount(''); setKind('expense'); setDate(formatToday()); setNotes(''); setTransferAccount(''); setFieldErrors({}); setIsAddVisible(true);
   };
 
   const closeModal = () => {
